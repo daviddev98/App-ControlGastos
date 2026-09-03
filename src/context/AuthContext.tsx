@@ -10,6 +10,8 @@ import * as WebBrowser from 'expo-web-browser';
 import { Session, User } from '@supabase/supabase-js';
 
 import { supabase } from '../services/supabaseClient';
+import { store } from '../store';
+import { resetFinanceState } from '../store/slices/financeSlice';
 import {
   getStoredProfileImage,
   setStoredEmail,
@@ -214,6 +216,7 @@ export function AuthProvider({ children }: Props) {
 
     setProfileImageUri(null);
     await Promise.all([setStoredEmail(''), setStoredProfileImage('')]);
+    store.dispatch(resetFinanceState());
 
     return { error: null };
   }, []);

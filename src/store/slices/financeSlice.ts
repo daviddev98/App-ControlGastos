@@ -1,7 +1,11 @@
 import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit';
 import { supabase } from '../../services/supabaseClient';
-import { getMonthDateRange, getMonthKeyFromDateString } from '../../utils/date';
+import { getMonthDateRange } from '../../utils/date';
 import { mapMovementFromDb } from '../../utils/movimientos';
+import {
+  construirSnapshotMovimientos,
+  movimientosLista,
+} from '../../structures/movimientosLista';
 
 import {
   Account,
@@ -170,6 +174,28 @@ export const updateMovimientoThunk = createAsyncThunk(
       return mapMovementFromDb(data);
     } catch (error: any) {
       return rejectWithValue(error.message || 'Error al actualizar el movimiento.');
+    }
+  }
+);
+
+export const deleteMovimientoThunk = createAsyncThunk(
+  'finance/deleteMovimiento',
+  async (movimientoId: string, { rejectWithValue }) => {
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData.user) throw new Error('Usuario no autenticado.');
+
+      const { error } = await supabase
+        .from('movimientos')
+        .delete()
+        .eq('id', movimientoId)
+        .eq('user_id', userData.user.id);
+
+      if (error) throw error;
+
+      return movimientoId;
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Error al eliminar el movimiento.');
     }
   }
 );
@@ -346,36 +372,10 @@ export type FinanceState = {
   accounts: Account[];
 };
 
-function removeMovementFromCaches(state: FinanceState, movimientoId: string) {
-  for (const key of Object.keys(state.movimientosByMonth)) {
-    state.movimientosByMonth[key] = state.movimientosByMonth[key].filter(
-      (movement) => movement.id !== movimientoId
-    );
-  }
-
-  for (const key of Object.keys(state.movimientosByAccount)) {
-    state.movimientosByAccount[key] = state.movimientosByAccount[key].filter(
-      (movement) => movement.id !== movimientoId
-    );
-  }
-}
-
-function addMovementToCaches(state: FinanceState, movement: MovementItem) {
-  const monthKey = movement.date ? getMonthKeyFromDateString(movement.date) : '2026-06';
-  const monthItems = state.movimientosByMonth[monthKey] ?? [];
-  state.movimientosByMonth[monthKey] = [
-    movement,
-    ...monthItems.filter((item) => item.id !== movement.id),
-  ];
-
-  const account = state.accounts.find((item) => item.name === movement.bankAccount);
-  if (account) {
-    const accountItems = state.movimientosByAccount[account.id] ?? [];
-    state.movimientosByAccount[account.id] = [
-      movement,
-      ...accountItems.filter((item) => item.id !== movement.id),
-    ];
-  }
+function sincronizarMovimientosEnEstado(state: FinanceState) {
+  const snapshot = construirSnapshotMovimientos(state.accounts);
+  state.movimientosByMonth = snapshot.movimientosByMonth;
+  state.movimientosByAccount = snapshot.movimientosByAccount;
 }
 
 const initialState: FinanceState = {
@@ -393,10 +393,12 @@ const financeSlice = createSlice({
   initialState,
   reducers: {
     addMovimiento: (state, action: PayloadAction<MovementItem>) => {
-      addMovementToCaches(state, action.payload);
+      movimientosLista.insertar(action.payload);
+      sincronizarMovimientosEnEstado(state);
     },
     addAccount: (state, action: PayloadAction<Account>) => {
       state.accounts.push(action.payload);
+      sincronizarMovimientosEnEstado(state);
     },
     addSavingsMeta: (state, action: PayloadAction<SavingsMeta>) => {
       state.savingsMetas.unshift(action.payload);
@@ -407,12 +409,25 @@ const financeSlice = createSlice({
         state.savingsMetas[index] = action.payload;
       }
     },
+    resetFinanceState: () => {
+      movimientosLista.vaciar();
+      return {
+        movimientosByMonth: {},
+        movimientosByAccount: {},
+        movimientosFetchRequestIdByMonth: {},
+        metas: metasGoals,
+        savingsMetas: [],
+        cardWallet: cardWalletData,
+        accounts: [],
+      };
+    },
   },
  
   extraReducers: (builder) => {
     builder
       .addCase(fetchAccountsThunk.fulfilled, (state, action) => {
         state.accounts = action.payload;
+        sincronizarMovimientosEnEstado(state);
       })
       .addCase(fetchSavingsMetasThunk.fulfilled, (state, action) => {
         state.savingsMetas = action.payload;
@@ -422,13 +437,19 @@ const financeSlice = createSlice({
         if (!exists) {
           state.accounts.push(action.payload);
         }
+        sincronizarMovimientosEnEstado(state);
       })
       .addCase(addMovimientoThunk.fulfilled, (state, action) => {
-        addMovementToCaches(state, action.payload);
+        movimientosLista.insertar(action.payload);
+        sincronizarMovimientosEnEstado(state);
       })
       .addCase(updateMovimientoThunk.fulfilled, (state, action) => {
-        removeMovementFromCaches(state, action.payload.id);
-        addMovementToCaches(state, action.payload);
+        movimientosLista.insertar(action.payload);
+        sincronizarMovimientosEnEstado(state);
+      })
+      .addCase(deleteMovimientoThunk.fulfilled, (state, action) => {
+        movimientosLista.eliminar(action.payload);
+        sincronizarMovimientosEnEstado(state);
       })
       .addCase(addSavingsMetaThunk.fulfilled, (state, action) => {
         state.savingsMetas.unshift(action.payload);
@@ -447,15 +468,21 @@ const financeSlice = createSlice({
         if (state.movimientosFetchRequestIdByMonth[monthKey] !== action.meta.requestId) {
           return;
         }
-        state.movimientosByMonth[monthKey] = movimientos;
+        movimientosLista.reemplazarMes(monthKey, movimientos);
+        sincronizarMovimientosEnEstado(state);
       })
       .addCase(fetchMovimientosByAccountThunk.fulfilled, (state, action) => {
-        const { accountId, movimientos } = action.payload;
-        state.movimientosByAccount[accountId] = movimientos;
+        movimientosLista.fusionar(action.payload.movimientos);
+        sincronizarMovimientosEnEstado(state);
       });
   },
 });
 
-export const { addMovimiento, addAccount, addSavingsMeta, updateSavingsMeta } =
-  financeSlice.actions;
+export const {
+  addMovimiento,
+  addAccount,
+  addSavingsMeta,
+  updateSavingsMeta,
+  resetFinanceState,
+} = financeSlice.actions;
 export default financeSlice.reducer;

@@ -7,7 +7,7 @@ import { ThemeColors } from '../constants/themes';
 type CustomButtonProps = {
   title: string;
   onPress: () => void;
-  variant?: 'primary' | 'secondary' | 'transparent';
+  variant?: 'primary' | 'secondary' | 'transparent' | 'destructive';
 };
 
 export default function CustomButton({
@@ -25,7 +25,10 @@ export default function CustomButton({
   );
 }
 
-const createStyles = (colors: ThemeColors, variant: 'primary' | 'secondary' | 'transparent') =>
+const createStyles = (
+  colors: ThemeColors,
+  variant: 'primary' | 'secondary' | 'transparent' | 'destructive'
+) =>
   StyleSheet.create({
     button: {
       marginTop: 12,
@@ -38,7 +41,9 @@ const createStyles = (colors: ThemeColors, variant: 'primary' | 'secondary' | 't
           ? colors.foreground
           : variant === 'secondary'
             ? colors.secondary
-            : 'transparent',
+            : variant === 'destructive'
+              ? colors.destructive
+              : 'transparent',
     },
     buttonText: {
       fontSize: 14,
@@ -46,8 +51,8 @@ const createStyles = (colors: ThemeColors, variant: 'primary' | 'secondary' | 't
       color:
         variant === 'transparent'
           ? colors.foreground
-          : variant === 'primary'
-            ? colors.primaryForeground
-            : colors.secondaryForeground,
+          : variant === 'secondary'
+            ? colors.secondaryForeground
+            : colors.primaryForeground,
     },
   });

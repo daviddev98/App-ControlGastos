@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { addMovimientoThunk, updateMovimientoThunk } from '../../store/slices/financeSlice';
+import { addMovimientoThunk, deleteMovimientoThunk, updateMovimientoThunk } from '../../store/slices/financeSlice';
 import CustomButton from '../../components/CustomButton';
 import ScreenHeader from '../../components/ScreenHeader';
 import { Tabs, TabsList, TabsTrigger, Text } from '../../components/ui';
@@ -284,6 +284,34 @@ export default function RegistrarMovimientoScreen({ navigation, route }: Props) 
     }
   };
 
+  const handleDelete = () => {
+    if (!movimientoId) {
+      return;
+    }
+
+    Alert.alert(
+      'Eliminar movimiento',
+      'El movimiento se eliminará de forma permanente. ¿Deseas continuar?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await dispatch(deleteMovimientoThunk(movimientoId)).unwrap();
+              Alert.alert('Movimiento eliminado', 'El registro se eliminó correctamente.', [
+                { text: 'OK', onPress: () => navigation.goBack() },
+              ]);
+            } catch {
+              Alert.alert('Error', 'No se pudo eliminar el movimiento.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   if (isEditing && !existingMovement) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
@@ -400,6 +428,10 @@ export default function RegistrarMovimientoScreen({ navigation, route }: Props) 
             }
             onPress={handleSubmit}
           />
+
+          {isEditing ? (
+            <CustomButton title="Eliminar movimiento" variant="destructive" onPress={handleDelete} />
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
