@@ -8,7 +8,9 @@ import React, {
 } from 'react';
 import * as WebBrowser from 'expo-web-browser';
 import { Session, User } from '@supabase/supabase-js';
-
+import { makeRedirectUri } from 'expo-auth-session';
+import * as Linking from 'expo-linking';
+import * as QueryParams from 'expo-auth-session/build/QueryParams';
 import { supabase } from '../services/supabaseClient';
 import { store } from '../store';
 import { resetFinanceState } from '../store/slices/financeSlice';
@@ -19,8 +21,6 @@ import {
 } from '../services/storage';
 
 WebBrowser.maybeCompleteAuthSession();
-
-const OAUTH_REDIRECT_URL = 'controldegastos://auth/v1/callback';
 
 type SignUpOptions = {
   fullName: string;
@@ -152,10 +152,18 @@ export function AuthProvider({ children }: Props) {
 
   const signInWithGoogle = useCallback(async () => {
     try {
+
+      const redirectTo = makeRedirectUri({
+        scheme: 'controldegastos',
+        preferLocalhost: false,
+      });
+
+      console.log('REDIRECT_URL_EXPO:', redirectTo)
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: OAUTH_REDIRECT_URL,
+          redirectTo,
           skipBrowserRedirect: true,
         },
       });
@@ -168,20 +176,23 @@ export function AuthProvider({ children }: Props) {
         return { error: 'No se pudo iniciar la sesión con Google.', success: false };
       }
 
-      const result = await WebBrowser.openAuthSessionAsync(data.url, OAUTH_REDIRECT_URL);
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
 
       if (result.type !== 'success' || !result.url) {
         return { error: null, success: false };
       }
 
-      const accessToken = extractToken(result.url, 'access_token');
-      const refreshToken = extractToken(result.url, 'refresh_token');
+      const urlToParse = result.url.replace('#', '?');
+      const { params, errorCode } = QueryParams.getQueryParams(urlToParse);
 
-      if (!accessToken || !refreshToken) {
+      const accessToken = params.access_token || extractToken(result.url, 'access_token');
+      const refreshToken = params.refresh_token || extractToken(result.url, 'refresh_token');
+
+      if (errorCode || !accessToken || !refreshToken) {
         return { error: 'No se pudieron recuperar los tokens de inicio de sesión.', success: false };
       }
 
-      const { error: sessionError } = await supabase.auth.setSession({
+      const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
         access_token: accessToken,
         refresh_token: refreshToken,
       });
@@ -190,12 +201,13 @@ export function AuthProvider({ children }: Props) {
         return { error: sessionError.message, success: false };
       }
 
-      const {
-        data: { user: currentUser },
-      } = await supabase.auth.getUser();
+      if (sessionData.session) {
+        setSession(sessionData.session);
+        setUser(sessionData.session.user);
 
-      if (currentUser?.email) {
-        await setStoredEmail(currentUser.email);
+        if (sessionData.session.user.email) {
+          await setStoredEmail(sessionData.session.user.email);
+        }
       }
 
       setProfileImageUri(null);
