@@ -1,6 +1,25 @@
 -- =============================================================================
--- Control de Gastos — script de recreación de Supabase
--- Ejecutar en: Dashboard → SQL Editor → New query → Run
+-- Control de Gastos — recreación de objetos para una instancia NUEVA de Supabase
+--
+-- Cómo usarlo:
+--   1. Crea el proyecto en https://supabase.com
+--   2. SQL Editor → New query → pega este archivo completo → Run
+--   3. Authentication → Providers:
+--        - Email: habilitado (la app usa signInWithPassword y signUp)
+--        - Google: habilitado si vas a usar "Continuar con Google"
+--   4. Authentication → URL Configuration:
+--        Redirect URLs:  controldegastos://auth/v1/callback
+--   5. Project Settings → API → copia URL y anon key al .env de la app:
+--        EXPO_PUBLIC_SUPABASE_URL=...
+--        EXPO_PUBLIC_SUPABASE_ANON_KEY=...
+--
+-- Este script crea:
+--   Tablas:  public.cuentas, public.movimientos, public.ahorros_metas
+--   RLS:     cada usuario solo ve/edita sus filas
+--   Storage: bucket público avatars  (ruta: {user_id}/avatar.ext)
+--
+-- No recrea usuarios ni datos. Auth.users nace vacío; hay que registrarse de nuevo.
+-- Google OAuth (Client ID / Secret) se configura en el Dashboard, no en SQL.
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
@@ -29,7 +48,7 @@ create table if not exists public.movimientos (
   category text not null,
   bank_account text not null,
   amount numeric(14, 2) not null,
-  due_date integer not null default 1,
+  due_date integer not null default 1 check (due_date between 1 and 31),
   date date not null,
   created_at timestamptz not null default now()
 );
@@ -57,6 +76,7 @@ create table if not exists public.ahorros_metas (
 create index if not exists ahorros_metas_user_id_idx on public.ahorros_metas (user_id);
 
 -- API de Supabase: el cliente usa el rol authenticated tras el login
+grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on table public.cuentas to authenticated;
 grant select, insert, update, delete on table public.movimientos to authenticated;
 grant select, insert, update, delete on table public.ahorros_metas to authenticated;

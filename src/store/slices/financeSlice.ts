@@ -1,11 +1,12 @@
 import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit';
 import { supabase } from '../../services/supabaseClient';
 import { getMonthDateRange } from '../../utils/date';
-import { mapMovementFromDb } from '../../utils/movimientos';
+import { mapMovementFromDb, mapMovementToDb } from '../../utils/movimientos';
 import {
   construirSnapshotMovimientos,
   movimientosLista,
 } from '../../structures/movimientosLista';
+import { AccionMovimiento, historialMovimientos } from '../../structures/historialMovimientos';
 
 import {
   Account,
@@ -200,6 +201,146 @@ export const deleteMovimientoThunk = createAsyncThunk(
   }
 );
 
+async function obtenerUsuarioId(): Promise<string> {
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData.user) {
+    throw new Error('Usuario no autenticado.');
+  }
+
+  return userData.user.id;
+}
+
+async function persistirCreacion(movimiento: MovementItem): Promise<void> {
+  const userId = await obtenerUsuarioId();
+  const { error } = await supabase.from('movimientos').insert([
+    {
+      id: movimiento.id,
+      user_id: userId,
+      ...mapMovementToDb(movimiento),
+    },
+  ]);
+
+  if (error) {
+    throw error;
+  }
+}
+
+async function persistirActualizacion(movimiento: MovementItem): Promise<void> {
+  const userId = await obtenerUsuarioId();
+  const { error } = await supabase
+    .from('movimientos')
+    .update(mapMovementToDb(movimiento))
+    .eq('id', movimiento.id)
+    .eq('user_id', userId);
+
+  if (error) {
+    throw error;
+  }
+}
+
+async function persistirEliminacion(movimientoId: string): Promise<void> {
+  const userId = await obtenerUsuarioId();
+  const { error } = await supabase
+    .from('movimientos')
+    .delete()
+    .eq('id', movimientoId)
+    .eq('user_id', userId);
+
+  if (error) {
+    throw error;
+  }
+}
+
+async function revertirAccionEnSupabase(accion: AccionMovimiento): Promise<void> {
+  if (accion.tipo === 'crear') {
+    await persistirEliminacion(accion.movimiento.id);
+    return;
+  }
+
+  if (accion.tipo === 'editar') {
+    await persistirActualizacion(accion.anterior);
+    return;
+  }
+
+  await persistirCreacion(accion.movimiento);
+}
+
+async function reaplicarAccionEnSupabase(accion: AccionMovimiento): Promise<void> {
+  if (accion.tipo === 'crear') {
+    await persistirCreacion(accion.movimiento);
+    return;
+  }
+
+  if (accion.tipo === 'editar') {
+    await persistirActualizacion(accion.actual);
+    return;
+  }
+
+  await persistirEliminacion(accion.movimiento.id);
+}
+
+function aplicarInversaEnLista(accion: AccionMovimiento): void {
+  if (accion.tipo === 'crear') {
+    movimientosLista.eliminar(accion.movimiento.id);
+    return;
+  }
+
+  if (accion.tipo === 'editar') {
+    movimientosLista.insertar(accion.anterior);
+    return;
+  }
+
+  movimientosLista.insertar(accion.movimiento);
+}
+
+function aplicarDirectaEnLista(accion: AccionMovimiento): void {
+  if (accion.tipo === 'crear') {
+    movimientosLista.insertar(accion.movimiento);
+    return;
+  }
+
+  if (accion.tipo === 'editar') {
+    movimientosLista.insertar(accion.actual);
+    return;
+  }
+
+  movimientosLista.eliminar(accion.movimiento.id);
+}
+
+export const deshacerMovimientoThunk = createAsyncThunk(
+  'finance/deshacerMovimiento',
+  async (_, { rejectWithValue }) => {
+    try {
+      const accion = historialMovimientos.cimaDeshacer();
+      if (!accion) {
+        throw new Error('No hay acciones para deshacer.');
+      }
+
+      await revertirAccionEnSupabase(accion);
+      return accion;
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Error al deshacer la acción.');
+    }
+  }
+);
+
+export const rehacerMovimientoThunk = createAsyncThunk(
+  'finance/rehacerMovimiento',
+  async (_, { rejectWithValue }) => {
+    try {
+      const accion = historialMovimientos.cimaRehacer();
+      if (!accion) {
+        throw new Error('No hay acciones para rehacer.');
+      }
+
+      await reaplicarAccionEnSupabase(accion);
+      return accion;
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Error al rehacer la acción.');
+    }
+  }
+);
+
 function mapSavingsMetaFromDb(row: Record<string, unknown>): SavingsMeta {
   return {
     id: String(row.id),
@@ -370,12 +511,23 @@ export type FinanceState = {
   savingsMetas: SavingsMeta[];
   cardWallet: CardWalletData;
   accounts: Account[];
+  puedeDeshacer: boolean;
+  puedeRehacer: boolean;
+  etiquetaDeshacer: string | null;
+  etiquetaRehacer: string | null;
 };
 
 function sincronizarMovimientosEnEstado(state: FinanceState) {
   const snapshot = construirSnapshotMovimientos(state.accounts);
   state.movimientosByMonth = snapshot.movimientosByMonth;
   state.movimientosByAccount = snapshot.movimientosByAccount;
+}
+
+function sincronizarHistorialEnEstado(state: FinanceState) {
+  state.puedeDeshacer = historialMovimientos.puedeDeshacer();
+  state.puedeRehacer = historialMovimientos.puedeRehacer();
+  state.etiquetaDeshacer = historialMovimientos.etiquetaCimaDeshacer();
+  state.etiquetaRehacer = historialMovimientos.etiquetaCimaRehacer();
 }
 
 const initialState: FinanceState = {
@@ -386,6 +538,10 @@ const initialState: FinanceState = {
   savingsMetas: [],
   cardWallet: cardWalletData,
   accounts: [],
+  puedeDeshacer: false,
+  puedeRehacer: false,
+  etiquetaDeshacer: null,
+  etiquetaRehacer: null,
 };
 
 const financeSlice = createSlice({
@@ -411,6 +567,7 @@ const financeSlice = createSlice({
     },
     resetFinanceState: () => {
       movimientosLista.vaciar();
+      historialMovimientos.vaciar();
       return {
         movimientosByMonth: {},
         movimientosByAccount: {},
@@ -419,6 +576,10 @@ const financeSlice = createSlice({
         savingsMetas: [],
         cardWallet: cardWalletData,
         accounts: [],
+        puedeDeshacer: false,
+        puedeRehacer: false,
+        etiquetaDeshacer: null,
+        etiquetaRehacer: null,
       };
     },
   },
@@ -440,16 +601,39 @@ const financeSlice = createSlice({
         sincronizarMovimientosEnEstado(state);
       })
       .addCase(addMovimientoThunk.fulfilled, (state, action) => {
+        historialMovimientos.registrarCrear(action.payload);
         movimientosLista.insertar(action.payload);
         sincronizarMovimientosEnEstado(state);
+        sincronizarHistorialEnEstado(state);
       })
       .addCase(updateMovimientoThunk.fulfilled, (state, action) => {
+        const anterior = movimientosLista.buscar(action.payload.id);
+        if (anterior) {
+          historialMovimientos.registrarEditar(anterior, action.payload);
+        }
         movimientosLista.insertar(action.payload);
         sincronizarMovimientosEnEstado(state);
+        sincronizarHistorialEnEstado(state);
       })
       .addCase(deleteMovimientoThunk.fulfilled, (state, action) => {
-        movimientosLista.eliminar(action.payload);
+        const eliminado = movimientosLista.eliminar(action.payload);
+        if (eliminado) {
+          historialMovimientos.registrarEliminar(eliminado);
+        }
         sincronizarMovimientosEnEstado(state);
+        sincronizarHistorialEnEstado(state);
+      })
+      .addCase(deshacerMovimientoThunk.fulfilled, (state, action) => {
+        historialMovimientos.confirmarDeshacer();
+        aplicarInversaEnLista(action.payload);
+        sincronizarMovimientosEnEstado(state);
+        sincronizarHistorialEnEstado(state);
+      })
+      .addCase(rehacerMovimientoThunk.fulfilled, (state, action) => {
+        historialMovimientos.confirmarRehacer();
+        aplicarDirectaEnLista(action.payload);
+        sincronizarMovimientosEnEstado(state);
+        sincronizarHistorialEnEstado(state);
       })
       .addCase(addSavingsMetaThunk.fulfilled, (state, action) => {
         state.savingsMetas.unshift(action.payload);

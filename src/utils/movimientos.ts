@@ -1,5 +1,16 @@
 import { MovementItem } from '../constants/sampleData';
 
+export function mapMovementToDb(movement: MovementItem) {
+  return {
+    merchant: movement.merchant,
+    category: movement.category,
+    bank_account: movement.bankAccount,
+    amount: movement.amount,
+    due_date: movement.dueDate,
+    date: movement.date,
+  };
+}
+
 export function mapMovementFromDb(row: Record<string, unknown>): MovementItem {
   return {
     id: String(row.id),

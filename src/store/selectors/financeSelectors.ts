@@ -52,3 +52,23 @@ export const selectAccountsNetBalance = createSelector(selectAccounts, (accounts
     return total + account.balance;
   }, 0)
 );
+
+export const selectPuedeDeshacer = createSelector(
+  selectFinance,
+  (finance) => finance.puedeDeshacer
+);
+
+export const selectPuedeRehacer = createSelector(
+  selectFinance,
+  (finance) => finance.puedeRehacer
+);
+
+export const selectEtiquetaDeshacer = createSelector(
+  selectFinance,
+  (finance) => finance.etiquetaDeshacer
+);
+
+export const selectEtiquetaRehacer = createSelector(
+  selectFinance,
+  (finance) => finance.etiquetaRehacer
+);
