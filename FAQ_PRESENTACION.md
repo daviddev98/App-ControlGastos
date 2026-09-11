@@ -608,25 +608,58 @@ Actualmente **no** hay pantalla de "olvidé mi contraseña". Se puede mencionar 
 
 ---
 
-## 14. Guion rápido para la demostración (5–10 min)
+## 14. Estructuras de Datos Propias (`src/structures/`)
 
-1. **Abrir app** → mostrar que restaura sesión o pide login
-2. **Login** → mostrar validación de campos
-3. **Inicio** → estadísticas, gráfico, cambiar mes
-4. **Botón +** → registrar un movimiento
-5. **Cuentas** → ver lista, entrar a detalle, crear cuenta
-6. **Metas** → ver/crear meta de ahorro
-7. **Configuración** → cambiar tema oscuro, foto de perfil
-8. **Cerrar sesión** → volver a Login
+### ¿Qué estructuras de datos implementaron y cuál es su uso real en la aplicación?
+
+El proyecto cuenta con **4 estructuras de datos propias** basadas en punteros y nodos, sin utilizar wrappers de arrays ni estructuras de librerías externas:
+
+| Estructura | Archivos | Uso real en la app | Operaciones clave |
+|---|---|---|---|
+| **Lista Enlazada** | `ListaEnlazada.ts`, `movimientosLista.ts` | Colección de movimientos financieros en memoria | `insertar`, `eliminar`, `buscar`, `recorrer` |
+| **Pila (LIFO)** | `Pila.ts`, `historialMovimientos.ts` | Deshacer (`undo`) y rehacer (`redo`) de movimientos | `apilar`, `desapilar`, `cima` |
+| **Cola (FIFO)** | `Cola.ts`, `colaPagos.ts` | Cola de pagos programados del mes | `encolar`, `desencolar`, `frente` |
+| **Árbol Binario de Búsqueda (BST)** | `ArbolBinario.ts`, `rankingMetas.ts` | Ranking y catálogo jerárquico de metas de ahorro por `montoObjetivo` | `insertar`, `buscar`, `inorden`, `preorden`, `postorden`, `vaciar` |
+
+### ¿Por qué no se guardan los punteros o nodos del BST en Redux?
+
+Redux Toolkit utiliza **Immer** para la inmutabilidad y requiere que el estado sea 100% serializable. Los nodos con punteros circulares o referencias de objetos rompen la serialización. Por ello, seguimos la arquitectura de:
+1. Mutar e insertar en la estructura de datos propia (`rankingMetas`).
+2. Obtener snapshots serializables (`inorden()`, `preorden()`, `postorden()`).
+3. Sincronizar dichos arrays en `financeSlice` para que la UI los consuma.
+
+### ¿Cómo funcionan los tres recorridos del BST en las metas de ahorro?
+
+- **Inorden (Izquierda → Raíz → Derecha):** Produce el ranking de metas estrictamente ordenado de menor a mayor `montoObjetivo` (orden natural de un BST).
+- **Preorden (Raíz → Izquierda → Derecha):** Muestra la jerarquía del árbol procesando la raíz antes que sus subárboles.
+- **Postorden (Izquierda → Derecha → Raíz):** Muestra el procesamiento de las hojas hacia la raíz.
 
 ---
 
-## 15. Respuestas cortas "de bolsillo"
+## 15. Guion rápido para la demostración (5–10 min)
+
+1. **Abrir app** → mostrar que restaura sesión o pide login
+2. **Login** → mostrar validación de campos
+3. **Inicio** → estadísticas, gráfico, cambiar mes, deshacer/rehacer (Pila LIFO) y atender pago programado (Cola FIFO)
+4. **Botón +** → registrar un movimiento
+5. **Cuentas** → ver lista, entrar a detalle, crear cuenta
+6. **Metas (Árbol Binario de Búsqueda BST):**
+   - Mostrar el **recorrido Inorden** con el ranking ordenado por `montoObjetivo`
+   - Crear una nueva meta → comprobar que se posiciona automáticamente en el orden correcto
+   - Utilizar el **buscador en BST** para encontrar una meta por monto o nombre (resaltando el nodo)
+   - Cambiar a **Preorden** y **Postorden** explicando la diferencia en la visita de nodos
+7. **Configuración** → cambiar tema oscuro, foto de perfil
+8. **Cerrar sesión** → comprobar que se vacían el BST, la lista, pilas y colas
+
+---
+
+## 16. Respuestas cortas "de bolsillo"
 
 | Pregunta | Respuesta corta |
 |----------|-----------------|
 | ¿Stack o tabs? | Ambos: Stack para auth y detalle, Tabs para módulos principales |
 | ¿Estado global? | Context para auth/tema, Redux para datos financieros |
+| ¿Estructuras de datos? | Lista enlazada, Pila LIFO, Cola FIFO y Árbol Binario BST propios |
 | ¿Backend? | Supabase (PostgreSQL + Auth + Storage) |
 | ¿TypeScript? | Sí, strict mode, props y navegación tipadas |
 | ¿Componentes reutilizables? | Sí, carpeta `components/` y `components/ui/` |
@@ -636,6 +669,6 @@ Actualmente **no** hay pantalla de "olvidé mi contraseña". Se puede mencionar 
 
 ---
 
-## 16. Cierre sugerido para la presentación oral
+## 17. Cierre sugerido para la presentación oral
 
-> "Control de Gastos es una aplicación móvil desarrollada con Expo, React Native y TypeScript. Usamos React Navigation con Stack y Tabs para organizar el flujo, Context API para autenticación y tema, y Redux Toolkit para los datos financieros sincronizados con Supabase. La arquitectura separa responsabilidades: la UI consume hooks y contexts, la navegación está tipada, y las operaciones de datos pasan por thunks async conectados a PostgreSQL en la nube. El objetivo es ofrecer al usuario una herramienta real para registrar gastos, administrar cuentas y cumplir metas de ahorro desde el móvil."
+> "Control de Gastos es una aplicación móvil desarrollada con Expo, React Native y TypeScript. Integra una arquitectura sólida que combina Context API para sesión y temas, Redux Toolkit para el estado financiero y 4 estructuras de datos propias basadas en punteros (Lista enlazada, Pila LIFO para deshacer/rehacer, Cola FIFO para pagos programados y un Árbol Binario de Búsqueda BST para el ranking y catálogo de metas con recorridos inorden, preorden y postorden). La app está sincronizada en tiempo real con Supabase en PostgreSQL, ofreciendo una experiencia completa, robusta y optimizada para la gestión financiera personal."

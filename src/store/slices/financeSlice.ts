@@ -8,6 +8,7 @@ import {
 } from '../../structures/movimientosLista';
 import { AccionMovimiento, historialMovimientos } from '../../structures/historialMovimientos';
 import { colaPagos } from '../../structures/colaPagos';
+import { rankingMetas } from '../../structures/rankingMetas';
 import { getScheduledPayments } from '../../utils/statistics';
 
 import {
@@ -519,6 +520,10 @@ export type FinanceState = {
   etiquetaRehacer: string | null;
   pagosEnCola: MovementItem[];
   siguientePagoId: string | null;
+  rankingInorden: SavingsMeta[];
+  rankingPreorden: SavingsMeta[];
+  rankingPostorden: SavingsMeta[];
+  metaBuscadaId: string | null;
 };
 
 function sincronizarMovimientosEnEstado(state: FinanceState) {
@@ -533,6 +538,13 @@ function sincronizarHistorialEnEstado(state: FinanceState) {
   state.puedeRehacer = historialMovimientos.puedeRehacer();
   state.etiquetaDeshacer = historialMovimientos.etiquetaCimaDeshacer();
   state.etiquetaRehacer = historialMovimientos.etiquetaCimaRehacer();
+}
+
+function sincronizarRankingEnEstado(state: FinanceState) {
+  rankingMetas.reconstruir(state.savingsMetas);
+  state.rankingInorden = rankingMetas.inorden();
+  state.rankingPreorden = rankingMetas.preorden();
+  state.rankingPostorden = rankingMetas.postorden();
 }
 
 function aplicarSnapshotCola(state: FinanceState) {
@@ -564,6 +576,10 @@ const initialState: FinanceState = {
   etiquetaRehacer: null,
   pagosEnCola: [],
   siguientePagoId: null,
+  rankingInorden: [],
+  rankingPreorden: [],
+  rankingPostorden: [],
+  metaBuscadaId: null,
 };
 
 const financeSlice = createSlice({
@@ -580,12 +596,17 @@ const financeSlice = createSlice({
     },
     addSavingsMeta: (state, action: PayloadAction<SavingsMeta>) => {
       state.savingsMetas.unshift(action.payload);
+      sincronizarRankingEnEstado(state);
     },
     updateSavingsMeta: (state, action: PayloadAction<SavingsMeta>) => {
       const index = state.savingsMetas.findIndex((meta) => meta.id === action.payload.id);
       if (index !== -1) {
         state.savingsMetas[index] = action.payload;
       }
+      sincronizarRankingEnEstado(state);
+    },
+    setMetaBuscadaId: (state, action: PayloadAction<string | null>) => {
+      state.metaBuscadaId = action.payload;
     },
     reconstruirColaPagos: (state, action: PayloadAction<string>) => {
       sincronizarColaEnEstado(state, action.payload);
@@ -598,6 +619,7 @@ const financeSlice = createSlice({
       movimientosLista.vaciar();
       historialMovimientos.vaciar();
       colaPagos.vaciar();
+      rankingMetas.vaciar();
       return {
         movimientosByMonth: {},
         movimientosByAccount: {},
@@ -612,6 +634,10 @@ const financeSlice = createSlice({
         etiquetaRehacer: null,
         pagosEnCola: [],
         siguientePagoId: null,
+        rankingInorden: [],
+        rankingPreorden: [],
+        rankingPostorden: [],
+        metaBuscadaId: null,
       };
     },
   },
@@ -624,6 +650,7 @@ const financeSlice = createSlice({
       })
       .addCase(fetchSavingsMetasThunk.fulfilled, (state, action) => {
         state.savingsMetas = action.payload;
+        sincronizarRankingEnEstado(state);
       })
       .addCase(createNewAccountThunk.fulfilled, (state, action) => {
         const exists = state.accounts.some((account) => account.id === action.payload.id);
@@ -669,12 +696,14 @@ const financeSlice = createSlice({
       })
       .addCase(addSavingsMetaThunk.fulfilled, (state, action) => {
         state.savingsMetas.unshift(action.payload);
+        sincronizarRankingEnEstado(state);
       })
       .addCase(updateSavingsMetaThunk.fulfilled, (state, action) => {
         const index = state.savingsMetas.findIndex((meta) => meta.id === action.payload.id);
         if (index !== -1) {
           state.savingsMetas[index] = action.payload;
         }
+        sincronizarRankingEnEstado(state);
       })
       .addCase(fetchMovimientosByMonthThunk.pending, (state, action) => {
         state.movimientosFetchRequestIdByMonth[action.meta.arg] = action.meta.requestId;
@@ -699,6 +728,7 @@ export const {
   addAccount,
   addSavingsMeta,
   updateSavingsMeta,
+  setMetaBuscadaId,
   reconstruirColaPagos,
   atenderSiguientePago,
   resetFinanceState,

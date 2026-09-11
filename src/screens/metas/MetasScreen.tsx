@@ -1,5 +1,5 @@
-import React, { useCallback, useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,16 +7,26 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import MetaListItem from '../../components/MetaListItem';
 import ScreenHeader from '../../components/ScreenHeader';
-import { Button, Text } from '../../components/ui';
+import { Button, Card, CardContent, Tabs, TabsList, TabsTrigger, Text } from '../../components/ui';
 import { SavingsMeta } from '../../constants/sampleData';
-import { spacing } from '../../constants/theme';
+import { radius, spacing } from '../../constants/theme';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import { ThemeColors } from '../../constants/themes';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import { selectSavingsMetas } from '../../store/selectors/financeSelectors';
-import { fetchSavingsMetasThunk } from '../../store/slices/financeSlice';
+import {
+  selectMetaBuscadaId,
+  selectRankingInorden,
+  selectRankingPostorden,
+  selectRankingPreorden,
+  selectSavingsMetas,
+} from '../../store/selectors/financeSelectors';
+import { fetchSavingsMetasThunk, setMetaBuscadaId } from '../../store/slices/financeSlice';
+import { rankingMetas } from '../../structures/rankingMetas';
 import { RootStackParamList } from '../../types/navigation';
+import { formatLPS } from '../../utils/currency';
 import { getMetaProgress } from '../../utils/metas';
+
+type TipoRecorrido = 'inorden' | 'preorden' | 'postorden';
 
 export default function MetasScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -25,6 +35,15 @@ export default function MetasScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   const metas = useAppSelector(selectSavingsMetas);
+  const rankingInorden = useAppSelector(selectRankingInorden);
+  const rankingPreorden = useAppSelector(selectRankingPreorden);
+  const rankingPostorden = useAppSelector(selectRankingPostorden);
+  const metaBuscadaId = useAppSelector(selectMetaBuscadaId);
+
+  const [tipoRecorrido, setTipoRecorrido] = useState<TipoRecorrido>('inorden');
+  const [criterioBusqueda, setCriterioBusqueda] = useState('');
+  const [mensajeBusqueda, setMensajeBusqueda] = useState<string | null>(null);
+  const [esErrorBusqueda, setEsErrorBusqueda] = useState(false);
 
   const loadMetas = useCallback(() => {
     dispatch(fetchSavingsMetasThunk());
@@ -42,6 +61,21 @@ export default function MetasScreen() {
       ? Math.round(metas.reduce((sum, meta) => sum + getMetaProgress(meta), 0) / metas.length)
       : 0;
 
+  const bstTotalNodos = rankingMetas.tamaño;
+  const bstAltura = rankingMetas.altura;
+
+  const metasList = useMemo(() => {
+    switch (tipoRecorrido) {
+      case 'preorden':
+        return rankingPreorden;
+      case 'postorden':
+        return rankingPostorden;
+      case 'inorden':
+      default:
+        return rankingInorden;
+    }
+  }, [tipoRecorrido, rankingInorden, rankingPreorden, rankingPostorden]);
+
   const handleOpenSettings = () => {
     navigation.navigate('Configuracion');
   };
@@ -52,6 +86,50 @@ export default function MetasScreen() {
 
   const handleCreateMeta = () => {
     navigation.navigate('MetaForm');
+  };
+
+  const handleBuscarEnBST = () => {
+    const termino = criterioBusqueda.trim();
+    if (!termino) {
+      dispatch(setMetaBuscadaId(null));
+      setMensajeBusqueda(null);
+      setEsErrorBusqueda(false);
+      return;
+    }
+
+    const montoNumerico = Number(termino);
+    let encontrada: SavingsMeta | undefined;
+
+    if (!isNaN(montoNumerico) && montoNumerico > 0) {
+      encontrada = rankingMetas.buscarPorMonto(montoNumerico);
+    }
+
+    if (!encontrada) {
+      encontrada = rankingMetas.buscar(
+        (m) =>
+          m.id.toLowerCase() === termino.toLowerCase() ||
+          m.nombre.toLowerCase().includes(termino.toLowerCase())
+      );
+    }
+
+    if (encontrada) {
+      dispatch(setMetaBuscadaId(encontrada.id));
+      setMensajeBusqueda(
+        `Nodo encontrado en BST: "${encontrada.nombre}" (${formatLPS(encontrada.montoObjetivo)})`
+      );
+      setEsErrorBusqueda(false);
+    } else {
+      dispatch(setMetaBuscadaId(null));
+      setMensajeBusqueda(`No se encontró ningún nodo para "${termino}" en el BST.`);
+      setEsErrorBusqueda(true);
+    }
+  };
+
+  const handleLimpiarBusqueda = () => {
+    setCriterioBusqueda('');
+    dispatch(setMetaBuscadaId(null));
+    setMensajeBusqueda(null);
+    setEsErrorBusqueda(false);
   };
 
   return (
@@ -67,6 +145,7 @@ export default function MetasScreen() {
           onSettingsPress={handleOpenSettings}
         />
 
+        {/* Resumen general y estadísticas del BST */}
         <View style={styles.summaryCard}>
           <View style={styles.summaryItem}>
             <Text variant="muted" style={styles.summaryLabel}>
@@ -79,31 +158,162 @@ export default function MetasScreen() {
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
             <Text variant="muted" style={styles.summaryLabel}>
-              Progreso promedio
+              Progreso prom.
             </Text>
             <Text variant="subtitle" style={styles.summaryValue}>
               {averageProgress}%
             </Text>
           </View>
-        </View>
-
-        <View style={styles.sectionHeader}>
-          <View style={styles.sectionTitleRow}>
-            <Ionicons name="flag-outline" size={20} color={colors.foreground} />
-            <Text variant="subtitle" style={styles.sectionTitle}>
-              Mis objetivos
+          <View style={styles.summaryDivider} />
+          <View style={styles.summaryItem}>
+            <Text variant="muted" style={styles.summaryLabel}>
+              Nodos BST
+            </Text>
+            <Text variant="subtitle" style={styles.summaryValue}>
+              {bstTotalNodos}
             </Text>
           </View>
-
-          <Button variant="outline" size="icon" onPress={handleCreateMeta}>
-            <Ionicons name="add" size={20} color={colors.foreground} />
-          </Button>
+          <View style={styles.summaryDivider} />
+          <View style={styles.summaryItem}>
+            <Text variant="muted" style={styles.summaryLabel}>
+              Altura BST
+            </Text>
+            <Text variant="subtitle" style={styles.summaryValue}>
+              {bstAltura}
+            </Text>
+          </View>
         </View>
 
+        {/* Buscador en Árbol Binario */}
+        <Card style={styles.searchCard}>
+          <CardContent style={styles.searchContent}>
+            <View style={styles.searchRow}>
+              <View style={styles.searchInputContainer}>
+                <Ionicons name="search-outline" size={18} color={colors.mutedForeground} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Buscar en BST por monto o nombre..."
+                  placeholderTextColor={colors.muted}
+                  value={criterioBusqueda}
+                  onChangeText={setCriterioBusqueda}
+                  onSubmitEditing={handleBuscarEnBST}
+                  returnKeyType="search"
+                />
+                {criterioBusqueda.length > 0 && (
+                  <Pressable onPress={handleLimpiarBusqueda} style={styles.clearSearchButton}>
+                    <Ionicons name="close-circle" size={18} color={colors.mutedForeground} />
+                  </Pressable>
+                )}
+              </View>
+              <Button size="sm" onPress={handleBuscarEnBST} style={styles.searchBtn}>
+                <Ionicons name="search" size={16} color="#FFFFFF" />
+              </Button>
+            </View>
+
+            {mensajeBusqueda && (
+              <View
+                style={[
+                  styles.searchFeedback,
+                  esErrorBusqueda ? styles.searchFeedbackError : styles.searchFeedbackSuccess,
+                ]}
+              >
+                <Ionicons
+                  name={esErrorBusqueda ? 'alert-circle-outline' : 'checkmark-circle-outline'}
+                  size={16}
+                  color={esErrorBusqueda ? colors.destructive : colors.success}
+                />
+                <Text
+                  variant="muted"
+                  style={[
+                    styles.searchFeedbackText,
+                    { color: esErrorBusqueda ? colors.destructive : colors.success },
+                  ]}
+                >
+                  {mensajeBusqueda}
+                </Text>
+              </View>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Selector de Recorridos del BST */}
+        <View style={styles.traversalSection}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionTitleRow}>
+              <Ionicons name="git-network-outline" size={20} color={colors.foreground} />
+              <Text variant="subtitle" style={styles.sectionTitle}>
+                Ranking en BST
+              </Text>
+            </View>
+
+            <Button variant="outline" size="icon" onPress={handleCreateMeta}>
+              <Ionicons name="add" size={20} color={colors.foreground} />
+            </Button>
+          </View>
+
+          <Tabs
+            value={tipoRecorrido}
+            onValueChange={(val) => setTipoRecorrido(val as TipoRecorrido)}
+            style={styles.tabsWrapper}
+          >
+            <TabsList>
+              <TabsTrigger value="inorden" title="Inorden" />
+              <TabsTrigger value="preorden" title="Preorden" />
+              <TabsTrigger value="postorden" title="Postorden" />
+            </TabsList>
+          </Tabs>
+
+          {/* Banner explicativo del recorrido académico */}
+          <View style={styles.explanationCard}>
+            <Ionicons
+              name={
+                tipoRecorrido === 'inorden'
+                  ? 'swap-vertical-outline'
+                  : tipoRecorrido === 'preorden'
+                  ? 'git-branch-outline'
+                  : 'git-merge-outline'
+              }
+              size={18}
+              color={colors.primary}
+            />
+            <View style={styles.explanationTextBlock}>
+              <Text style={styles.explanationTitle}>
+                {tipoRecorrido === 'inorden' && 'Recorrido Inorden (L → Raíz → R)'}
+                {tipoRecorrido === 'preorden' && 'Recorrido Preorden (Raíz → L → R)'}
+                {tipoRecorrido === 'postorden' && 'Recorrido Postorden (L → R → Raíz)'}
+              </Text>
+              <Text variant="muted" style={styles.explanationDescription}>
+                {tipoRecorrido === 'inorden' &&
+                  'Ranking ordenado de menor a mayor monto objetivo (orden natural del BST).'}
+                {tipoRecorrido === 'preorden' &&
+                  'Estructura jerárquica del árbol evaluando la raíz primero.'}
+                {tipoRecorrido === 'postorden' &&
+                  'Procesamiento de hojas hacia la raíz del árbol binario.'}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Lista de Metas según el recorrido activo del BST */}
         <View style={styles.metasList}>
-          {metas.map((meta) => (
-            <MetaListItem key={meta.id} item={meta} onPress={handleMetaPress} />
-          ))}
+          {metasList.length > 0 ? (
+            metasList.map((meta, index) => (
+              <MetaListItem
+                key={`${meta.id}-${tipoRecorrido}`}
+                item={meta}
+                onPress={handleMetaPress}
+                rankingIndex={index + 1}
+                isHighlighted={meta.id === metaBuscadaId}
+              />
+            ))
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="folder-open-outline" size={40} color={colors.mutedForeground} />
+              <Text variant="muted" style={styles.emptyText}>
+                No hay metas registradas en el árbol binario.
+              </Text>
+            </View>
+          )}
         </View>
 
         <Pressable style={styles.createButton} onPress={handleCreateMeta}>
@@ -137,7 +347,7 @@ const createStyles = (colors: ThemeColors) =>
       borderWidth: 1,
       borderColor: colors.border,
       padding: spacing.md,
-      marginBottom: spacing.lg,
+      marginBottom: spacing.md,
     },
     summaryItem: {
       flex: 1,
@@ -147,21 +357,84 @@ const createStyles = (colors: ThemeColors) =>
     summaryDivider: {
       width: 1,
       backgroundColor: colors.border,
-      marginHorizontal: spacing.sm,
+      marginHorizontal: 4,
     },
     summaryLabel: {
-      fontSize: 12,
+      fontSize: 11,
       textAlign: 'center',
     },
     summaryValue: {
-      fontSize: 22,
+      fontSize: 18,
       fontWeight: '700',
+    },
+    searchCard: {
+      borderRadius: 16,
+      marginBottom: spacing.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    searchContent: {
+      padding: spacing.sm,
+      gap: 8,
+    },
+    searchRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    searchInputContainer: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.secondary,
+      borderRadius: radius.md,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      gap: 6,
+    },
+    searchInput: {
+      flex: 1,
+      fontSize: 13,
+      color: colors.foreground,
+      paddingVertical: 2,
+    },
+    clearSearchButton: {
+      padding: 2,
+    },
+    searchBtn: {
+      paddingHorizontal: 12,
+      height: 38,
+      borderRadius: radius.md,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    searchFeedback: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+      borderRadius: radius.sm,
+    },
+    searchFeedbackSuccess: {
+      backgroundColor: `${colors.success}1A`,
+    },
+    searchFeedbackError: {
+      backgroundColor: `${colors.destructive}1A`,
+    },
+    searchFeedbackText: {
+      fontSize: 12,
+      fontWeight: '500',
+      flex: 1,
+    },
+    traversalSection: {
+      marginBottom: spacing.md,
+      gap: spacing.sm,
     },
     sectionHeader: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      marginBottom: spacing.sm,
     },
     sectionTitleRow: {
       flexDirection: 'row',
@@ -169,10 +442,47 @@ const createStyles = (colors: ThemeColors) =>
       gap: spacing.sm,
     },
     sectionTitle: {
-      fontSize: 20,
+      fontSize: 18,
+      fontWeight: '700',
+    },
+    tabsWrapper: {
+      marginTop: 2,
+    },
+    explanationCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: `${colors.primary}0F`,
+      borderRadius: radius.md,
+      padding: spacing.sm,
+      gap: spacing.sm,
+      borderWidth: 1,
+      borderColor: `${colors.primary}26`,
+    },
+    explanationTextBlock: {
+      flex: 1,
+      gap: 2,
+    },
+    explanationTitle: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: colors.primary,
+    },
+    explanationDescription: {
+      fontSize: 11,
+      lineHeight: 15,
     },
     metasList: {
       gap: 0,
+    },
+    emptyContainer: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: spacing.xl,
+      gap: spacing.sm,
+    },
+    emptyText: {
+      fontSize: 13,
+      textAlign: 'center',
     },
     createButton: {
       flexDirection: 'row',

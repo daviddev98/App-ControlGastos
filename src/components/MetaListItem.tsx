@@ -13,18 +13,25 @@ import { Card, CardContent, Text } from './ui';
 type Props = {
   item: SavingsMeta;
   onPress: (item: SavingsMeta) => void;
+  rankingIndex?: number;
+  isHighlighted?: boolean;
 };
 
-export default function MetaListItem({ item, onPress }: Props) {
+export default function MetaListItem({ item, onPress, rankingIndex, isHighlighted }: Props) {
   const { colors } = useAppSettings();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const progress = getMetaProgress(item);
 
   return (
     <Pressable onPress={() => onPress(item)}>
-      <Card style={styles.card}>
+      <Card style={[styles.card, isHighlighted && styles.cardHighlighted]}>
         <CardContent>
           <View style={styles.headerRow}>
+            {rankingIndex !== undefined && (
+              <View style={styles.rankingBadge}>
+                <Text style={styles.rankingBadgeText}>#{rankingIndex}</Text>
+              </View>
+            )}
             <View style={styles.titleBlock}>
               <Text variant="default" style={styles.name}>
                 {item.nombre}
@@ -171,6 +178,25 @@ const createStyles = (colors: ThemeColors) =>
       flex: 1,
     },
     deadlineText: {
+      fontSize: 11,
+    },
+    cardHighlighted: {
+      borderColor: colors.primary,
+      borderWidth: 2,
+      backgroundColor: `${colors.primary}12`,
+    },
+    rankingBadge: {
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: radius.full,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 2,
+    },
+    rankingBadgeText: {
+      color: '#FFFFFF',
+      fontWeight: '700',
       fontSize: 11,
     },
   });

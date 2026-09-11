@@ -77,3 +77,23 @@ export const selectEtiquetaRehacer = createSelector(
   selectFinance,
   (finance) => finance.etiquetaRehacer
 );
+
+export const selectRankingInorden = createSelector(
+  selectFinance,
+  (finance) => finance.rankingInorden
+);
+
+export const selectRankingPreorden = createSelector(
+  selectFinance,
+  (finance) => finance.rankingPreorden
+);
+
+export const selectRankingPostorden = createSelector(
+  selectFinance,
+  (finance) => finance.rankingPostorden
+);
+
+export const selectMetaBuscadaId = createSelector(
+  selectFinance,
+  (finance) => finance.metaBuscadaId
+);
