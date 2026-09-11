@@ -1,11 +1,13 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
+  atenderSiguientePago,
   deshacerMovimientoThunk,
   fetchMovimientosByMonthThunk,
+  reconstruirColaPagos,
   rehacerMovimientoThunk,
 } from '../../store/slices/financeSlice';
 import InstallmentCard from '../../components/InstallmentCard';
@@ -24,9 +26,10 @@ import {
   selectEtiquetaRehacer,
   selectMonthStatistics,
   selectMovimientosByMonth,
-  selectPagosProgramadosByMonth,
+  selectPagosEnCola,
   selectPuedeDeshacer,
   selectPuedeRehacer,
+  selectSiguientePagoId,
 } from '../../store/selectors/financeSelectors';
 import {
   selectInicioActiveTab,
@@ -55,7 +58,8 @@ export default function InicioScreen() {
   const selectedMonthKey = useAppSelector(selectInicioSelectedMonthKey);
   const monthData = useAppSelector(selectMonthStatistics(selectedMonthKey));
   const movimientos = useAppSelector(selectMovimientosByMonth(selectedMonthKey));
-  const pagosProgramados = useAppSelector(selectPagosProgramadosByMonth(selectedMonthKey));
+  const pagosEnCola = useAppSelector(selectPagosEnCola);
+  const siguientePagoId = useAppSelector(selectSiguientePagoId);
   const puedeDeshacer = useAppSelector(selectPuedeDeshacer);
   const puedeRehacer = useAppSelector(selectPuedeRehacer);
   const etiquetaDeshacer = useAppSelector(selectEtiquetaDeshacer);
@@ -78,8 +82,25 @@ export default function InicioScreen() {
     }, [loadMovimientos])
   );
 
+  useEffect(() => {
+    dispatch(reconstruirColaPagos(selectedMonthKey));
+  }, [dispatch, selectedMonthKey, movimientos]);
+
   const handleMovementPress = (movement: MovementItem) => {
     navigation.navigate('RegistroMovimiento', { movimientoId: movement.id });
+  };
+
+  const handleAtenderSiguiente = () => {
+    const siguiente = pagosEnCola[0];
+    if (!siguiente) {
+      return;
+    }
+
+    dispatch(atenderSiguientePago());
+    Alert.alert(
+      'Pago atendido',
+      `${siguiente.merchant} salió de la cola. El siguiente será el más antiguo que quede pendiente.`
+    );
   };
 
   const handleDeshacer = async () => {
@@ -199,17 +220,35 @@ export default function InicioScreen() {
             </TabsContent>
 
             <TabsContent value="pagos-programados">
-              {pagosProgramados.length > 0 ? (
-                pagosProgramados.map((item) => (
-                  <InstallmentCard
-                    key={item.id}
-                    item={item}
-                    onPress={() => handleMovementPress(item)}
+              {pagosEnCola.length > 0 ? (
+                <>
+                  <Text variant="muted" style={styles.queueHint}>
+                    Cola FIFO: el gasto que vence primero está al frente. Atenderlo lo saca;
+                    el siguiente pasa a ser el más antiguo que quede.
+                  </Text>
+                  <Button
+                    title="Atender siguiente"
+                    variant="outline"
+                    size="sm"
+                    onPress={handleAtenderSiguiente}
+                    style={styles.queueButton}
                   />
-                ))
+                  {pagosEnCola.map((item, index) => (
+                    <InstallmentCard
+                      key={item.id}
+                      item={item}
+                      colaLabel={
+                        item.id === siguientePagoId
+                          ? 'Frente de la cola'
+                          : `Turno ${index + 1}`
+                      }
+                      onPress={() => handleMovementPress(item)}
+                    />
+                  ))}
+                </>
               ) : (
                 <Text variant="muted" style={styles.emptyText}>
-                  No hay pagos programados en este mes.
+                  No hay pagos pendientes en la cola de este mes.
                 </Text>
               )}
             </TabsContent>
@@ -266,5 +305,13 @@ const createStyles = (colors: ThemeColors) =>
     emptyText: {
       textAlign: 'center',
       marginTop: spacing.md,
+    },
+    queueHint: {
+      fontSize: 12,
+      marginBottom: 10,
+    },
+    queueButton: {
+      marginBottom: 12,
+      width: '100%',
     },
   });

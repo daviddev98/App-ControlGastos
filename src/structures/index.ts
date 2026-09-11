@@ -1,5 +1,6 @@
 export { ListaEnlazada, Nodo } from './ListaEnlazada';
 export { Pila } from './Pila';
+export { Cola } from './Cola';
 export {
   construirSnapshotMovimientos,
   movimientosLista,
@@ -9,3 +10,4 @@ export {
   etiquetaAccion,
 } from './historialMovimientos';
 export type { AccionMovimiento } from './historialMovimientos';
+export { colaPagos } from './colaPagos';

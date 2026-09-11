@@ -1,7 +1,7 @@
 import { createSelector } from '@reduxjs/toolkit';
 
 import { RootState } from '../index';
-import { buildMonthStatistics, getScheduledPayments } from '../../utils/statistics';
+import { buildMonthStatistics } from '../../utils/statistics';
 import { movimientosLista } from '../../structures/movimientosLista';
 
 export const selectFinance = (state: RootState) => state.finance;
@@ -15,10 +15,15 @@ export const selectMovimientosByAccount = (accountId: string) =>
 export const selectMovimientoById = (movimientoId: string) =>
   createSelector(selectFinance, () => movimientosLista.buscar(movimientoId));
 
-export const selectPagosProgramadosByMonth = (monthKey: string) =>
-  createSelector(selectMovimientosByMonth(monthKey), (movimientos) =>
-    getScheduledPayments(movimientos)
-  );
+export const selectPagosEnCola = createSelector(
+  selectFinance,
+  (finance) => finance.pagosEnCola
+);
+
+export const selectSiguientePagoId = createSelector(
+  selectFinance,
+  (finance) => finance.siguientePagoId
+);
 
 export const selectMonthStatistics = (monthKey: string) =>
   createSelector(selectMovimientosByMonth(monthKey), (movimientos) =>

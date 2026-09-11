@@ -7,6 +7,8 @@ import {
   movimientosLista,
 } from '../../structures/movimientosLista';
 import { AccionMovimiento, historialMovimientos } from '../../structures/historialMovimientos';
+import { colaPagos } from '../../structures/colaPagos';
+import { getScheduledPayments } from '../../utils/statistics';
 
 import {
   Account,
@@ -515,12 +517,15 @@ export type FinanceState = {
   puedeRehacer: boolean;
   etiquetaDeshacer: string | null;
   etiquetaRehacer: string | null;
+  pagosEnCola: MovementItem[];
+  siguientePagoId: string | null;
 };
 
 function sincronizarMovimientosEnEstado(state: FinanceState) {
   const snapshot = construirSnapshotMovimientos(state.accounts);
   state.movimientosByMonth = snapshot.movimientosByMonth;
   state.movimientosByAccount = snapshot.movimientosByAccount;
+  sincronizarColaEnEstado(state);
 }
 
 function sincronizarHistorialEnEstado(state: FinanceState) {
@@ -528,6 +533,21 @@ function sincronizarHistorialEnEstado(state: FinanceState) {
   state.puedeRehacer = historialMovimientos.puedeRehacer();
   state.etiquetaDeshacer = historialMovimientos.etiquetaCimaDeshacer();
   state.etiquetaRehacer = historialMovimientos.etiquetaCimaRehacer();
+}
+
+function aplicarSnapshotCola(state: FinanceState) {
+  state.pagosEnCola = colaPagos.recorrer();
+  state.siguientePagoId = colaPagos.frente()?.id ?? null;
+}
+
+function sincronizarColaEnEstado(state: FinanceState, monthKey = colaPagos.mesActual) {
+  if (!monthKey) {
+    aplicarSnapshotCola(state);
+    return;
+  }
+
+  colaPagos.reconstruir(monthKey, getScheduledPayments(state.movimientosByMonth[monthKey] ?? []));
+  aplicarSnapshotCola(state);
 }
 
 const initialState: FinanceState = {
@@ -542,6 +562,8 @@ const initialState: FinanceState = {
   puedeRehacer: false,
   etiquetaDeshacer: null,
   etiquetaRehacer: null,
+  pagosEnCola: [],
+  siguientePagoId: null,
 };
 
 const financeSlice = createSlice({
@@ -565,9 +587,17 @@ const financeSlice = createSlice({
         state.savingsMetas[index] = action.payload;
       }
     },
+    reconstruirColaPagos: (state, action: PayloadAction<string>) => {
+      sincronizarColaEnEstado(state, action.payload);
+    },
+    atenderSiguientePago: (state) => {
+      colaPagos.atenderSiguiente();
+      aplicarSnapshotCola(state);
+    },
     resetFinanceState: () => {
       movimientosLista.vaciar();
       historialMovimientos.vaciar();
+      colaPagos.vaciar();
       return {
         movimientosByMonth: {},
         movimientosByAccount: {},
@@ -580,6 +610,8 @@ const financeSlice = createSlice({
         puedeRehacer: false,
         etiquetaDeshacer: null,
         etiquetaRehacer: null,
+        pagosEnCola: [],
+        siguientePagoId: null,
       };
     },
   },
@@ -667,6 +699,8 @@ export const {
   addAccount,
   addSavingsMeta,
   updateSavingsMeta,
+  reconstruirColaPagos,
+  atenderSiguientePago,
   resetFinanceState,
 } = financeSlice.actions;
 export default financeSlice.reducer;

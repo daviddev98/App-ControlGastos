@@ -13,9 +13,10 @@ import { Card, CardContent, Text } from './ui';
 type Props = {
   item: MovementItem;
   onPress?: () => void;
+  colaLabel?: string;
 };
 
-export default function InstallmentCard({ item, onPress }: Props) {
+export default function InstallmentCard({ item, onPress, colaLabel }: Props) {
   const { colors } = useAppSettings();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const isExpense = item.amount < 0;
@@ -27,6 +28,11 @@ export default function InstallmentCard({ item, onPress }: Props) {
           <CategoryIcon category={item.category} />
 
           <View style={styles.info}>
+            {colaLabel ? (
+              <Text variant="muted" style={styles.colaLabel}>
+                {colaLabel}
+              </Text>
+            ) : null}
             <Text variant="default" style={styles.merchant}>
               {item.merchant}
             </Text>
@@ -90,6 +96,12 @@ const createStyles = (colors: ThemeColors) =>
     merchant: {
       fontWeight: '700',
       fontSize: 13,
+    },
+    colaLabel: {
+      fontSize: 11,
+      fontWeight: '700',
+      textTransform: 'uppercase',
+      color: colors.primary,
     },
     category: {
       fontSize: 12,
