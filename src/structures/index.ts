@@ -13,3 +13,5 @@ export type { AccionMovimiento } from './historialMovimientos';
 export { colaPagos } from './colaPagos';
 export { ArbolBinario, NodoArbol } from './ArbolBinario';
 export { rankingMetas, compararMetas } from './rankingMetas';
+export { TablaHash } from './TablaHash';
+export { cuentasIndice } from './cuentasIndice';

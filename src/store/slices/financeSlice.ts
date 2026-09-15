@@ -9,6 +9,7 @@ import {
 import { AccionMovimiento, historialMovimientos } from '../../structures/historialMovimientos';
 import { colaPagos } from '../../structures/colaPagos';
 import { rankingMetas } from '../../structures/rankingMetas';
+import { cuentasIndice } from '../../structures/cuentasIndice';
 import { getScheduledPayments } from '../../utils/statistics';
 
 import {
@@ -524,6 +525,9 @@ export type FinanceState = {
   rankingPreorden: SavingsMeta[];
   rankingPostorden: SavingsMeta[];
   metaBuscadaId: string | null;
+  hashCuentasTamaño: number;
+  hashCuentasCubetas: number;
+  hashCuentasColisiones: number;
 };
 
 function sincronizarMovimientosEnEstado(state: FinanceState) {
@@ -545,6 +549,13 @@ function sincronizarRankingEnEstado(state: FinanceState) {
   state.rankingInorden = rankingMetas.inorden();
   state.rankingPreorden = rankingMetas.preorden();
   state.rankingPostorden = rankingMetas.postorden();
+}
+
+function sincronizarCuentasEnEstado(state: FinanceState) {
+  state.accounts = cuentasIndice.valores();
+  state.hashCuentasTamaño = cuentasIndice.tamaño;
+  state.hashCuentasCubetas = cuentasIndice.cubetas;
+  state.hashCuentasColisiones = cuentasIndice.colisiones;
 }
 
 function aplicarSnapshotCola(state: FinanceState) {
@@ -580,6 +591,9 @@ const initialState: FinanceState = {
   rankingPreorden: [],
   rankingPostorden: [],
   metaBuscadaId: null,
+  hashCuentasTamaño: 0,
+  hashCuentasCubetas: 8,
+  hashCuentasColisiones: 0,
 };
 
 const financeSlice = createSlice({
@@ -591,7 +605,8 @@ const financeSlice = createSlice({
       sincronizarMovimientosEnEstado(state);
     },
     addAccount: (state, action: PayloadAction<Account>) => {
-      state.accounts.push(action.payload);
+      cuentasIndice.establecer(action.payload);
+      sincronizarCuentasEnEstado(state);
       sincronizarMovimientosEnEstado(state);
     },
     addSavingsMeta: (state, action: PayloadAction<SavingsMeta>) => {
@@ -620,6 +635,7 @@ const financeSlice = createSlice({
       historialMovimientos.vaciar();
       colaPagos.vaciar();
       rankingMetas.vaciar();
+      cuentasIndice.vaciar();
       return {
         movimientosByMonth: {},
         movimientosByAccount: {},
@@ -638,6 +654,9 @@ const financeSlice = createSlice({
         rankingPreorden: [],
         rankingPostorden: [],
         metaBuscadaId: null,
+        hashCuentasTamaño: 0,
+        hashCuentasCubetas: 8,
+        hashCuentasColisiones: 0,
       };
     },
   },
@@ -645,7 +664,8 @@ const financeSlice = createSlice({
   extraReducers: (builder) => {
     builder
       .addCase(fetchAccountsThunk.fulfilled, (state, action) => {
-        state.accounts = action.payload;
+        cuentasIndice.reconstruir(action.payload);
+        sincronizarCuentasEnEstado(state);
         sincronizarMovimientosEnEstado(state);
       })
       .addCase(fetchSavingsMetasThunk.fulfilled, (state, action) => {
@@ -653,10 +673,8 @@ const financeSlice = createSlice({
         sincronizarRankingEnEstado(state);
       })
       .addCase(createNewAccountThunk.fulfilled, (state, action) => {
-        const exists = state.accounts.some((account) => account.id === action.payload.id);
-        if (!exists) {
-          state.accounts.push(action.payload);
-        }
+        cuentasIndice.establecer(action.payload);
+        sincronizarCuentasEnEstado(state);
         sincronizarMovimientosEnEstado(state);
       })
       .addCase(addMovimientoThunk.fulfilled, (state, action) => {

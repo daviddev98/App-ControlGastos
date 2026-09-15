@@ -3,6 +3,7 @@ import { createSelector } from '@reduxjs/toolkit';
 import { RootState } from '../index';
 import { buildMonthStatistics } from '../../utils/statistics';
 import { movimientosLista } from '../../structures/movimientosLista';
+import { cuentasIndice } from '../../structures/cuentasIndice';
 
 export const selectFinance = (state: RootState) => state.finance;
 
@@ -45,9 +46,7 @@ export const selectCardWallet = createSelector(selectFinance, (finance) => finan
 export const selectAccounts = createSelector(selectFinance, (finance) => finance.accounts);
 
 export const selectAccountById = (accountId: string) =>
-  createSelector(selectAccounts, (accounts) =>
-    accounts.find((account) => account.id === accountId)
-  );
+  createSelector(selectFinance, () => cuentasIndice.obtener(accountId));
 
 export const selectAccountsNetBalance = createSelector(selectAccounts, (accounts) =>
   accounts.reduce((total, account) => {
@@ -92,6 +91,12 @@ export const selectRankingPostorden = createSelector(
   selectFinance,
   (finance) => finance.rankingPostorden
 );
+
+export const selectHashCuentasResumen = createSelector(selectFinance, (finance) => ({
+  tamaño: finance.hashCuentasTamaño,
+  cubetas: finance.hashCuentasCubetas,
+  colisiones: finance.hashCuentasColisiones,
+}));
 
 export const selectMetaBuscadaId = createSelector(
   selectFinance,
