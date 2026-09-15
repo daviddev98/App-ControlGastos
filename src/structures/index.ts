@@ -15,3 +15,5 @@ export { ArbolBinario, NodoArbol } from './ArbolBinario';
 export { rankingMetas, compararMetas } from './rankingMetas';
 export { TablaHash } from './TablaHash';
 export { cuentasIndice } from './cuentasIndice';
+export { Grafo } from './Grafo';
+export { redCategorias, CATEGORIAS_GRAFO } from './redCategorias';

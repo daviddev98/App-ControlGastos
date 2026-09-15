@@ -164,6 +164,23 @@ export default function ConfiguracionScreen({ navigation }: Props) {
           </CardContent>
         </Card>
 
+        <Card style={styles.settingCard}>
+          <CardContent style={styles.settingRow}>
+            <View style={styles.settingInfo}>
+              <Text variant="default" style={styles.settingTitle}>
+                Red de categorías
+              </Text>
+              <Text variant="muted">Grafo de relaciones con recorridos BFS y DFS</Text>
+            </View>
+            <Pressable
+              style={styles.profileButton}
+              onPress={() => navigation.navigate('RedCategorias')}
+            >
+              <Text variant="link">Abrir</Text>
+            </Pressable>
+          </CardContent>
+        </Card>
+
         <Text variant="muted" style={styles.themeHint}>
           Tema actual: {theme === 'dark' ? 'Oscuro' : 'Claro'}
         </Text>

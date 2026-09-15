@@ -7,6 +7,7 @@ export type RootStackParamList = {
   CuentasDetalle: { accountId: string };
   NuevaCuenta: undefined;
   MetaForm: { metaId?: string } | undefined;
+  RedCategorias: undefined;
 };
 
 export type MainTabParamList = {
