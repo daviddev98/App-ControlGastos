@@ -151,7 +151,9 @@ export default function RegistrarMovimientoScreen({ navigation, route }: Props) 
   const { colors } = useAppSettings();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
-  const existingMovement = useAppSelector(selectMovimientoById(movimientoId ?? ''));
+  const existingMovement = useAppSelector((state) =>
+    selectMovimientoById(state, movimientoId ?? '')
+  );
   const accounts = useAppSelector(selectAccounts);
 
   const [transactionType, setTransactionType] = useState<TransactionType>('gasto');

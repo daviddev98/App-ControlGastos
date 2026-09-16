@@ -6,8 +6,10 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "splash": {
-      "backgroundColor": "#ffffff"
+    "updates": {
+      "enabled": false,
+      "checkAutomatically": "NEVER",
+      "fallbackToCacheTimeout": 0
     },
     "ios": {
       "supportsTablet": true
@@ -31,7 +33,14 @@
           "photosPermission": "La app necesita acceso a tus fotos para configurar tu perfil."
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#ffffff"
+        }
+      ]
     ],
     "extra": {
       "eas": {

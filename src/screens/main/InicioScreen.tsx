@@ -24,7 +24,6 @@ import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import {
   selectEtiquetaDeshacer,
   selectEtiquetaRehacer,
-  selectMonthStatistics,
   selectMovimientosByMonth,
   selectPagosEnCola,
   selectPuedeDeshacer,
@@ -42,6 +41,7 @@ import {
 import { RootStackParamList } from '../../types/navigation';
 import { formatLPS } from '../../utils/currency';
 import { getMonthKey } from '../../utils/date';
+import { buildMonthStatistics } from '../../utils/statistics';
 
 function monthKeyToDate(monthKey: string): Date {
   const [year, month] = monthKey.split('-');
@@ -56,8 +56,11 @@ export default function InicioScreen() {
 
   const activeTab = useAppSelector(selectInicioActiveTab);
   const selectedMonthKey = useAppSelector(selectInicioSelectedMonthKey);
-  const monthData = useAppSelector(selectMonthStatistics(selectedMonthKey));
-  const movimientos = useAppSelector(selectMovimientosByMonth(selectedMonthKey));
+  const movimientos = useAppSelector((state) => selectMovimientosByMonth(state, selectedMonthKey));
+  const monthData = useMemo(
+    () => buildMonthStatistics(movimientos, selectedMonthKey),
+    [movimientos, selectedMonthKey]
+  );
   const pagosEnCola = useAppSelector(selectPagosEnCola);
   const siguientePagoId = useAppSelector(selectSiguientePagoId);
   const puedeDeshacer = useAppSelector(selectPuedeDeshacer);

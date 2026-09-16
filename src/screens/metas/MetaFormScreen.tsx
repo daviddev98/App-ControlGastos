@@ -167,7 +167,7 @@ export default function MetaFormScreen({ navigation, route }: Props) {
   const { colors } = useAppSettings();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
-  const existingMeta = useAppSelector(selectSavingsMetaById(metaId ?? ''));
+  const existingMeta = useAppSelector((state) => selectSavingsMetaById(state, metaId ?? ''));
 
   const [nombre, setNombre] = useState(existingMeta?.nombre ?? '');
   const [descripcion, setDescripcion] = useState(existingMeta?.descripcion ?? '');

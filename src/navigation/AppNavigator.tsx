@@ -1,8 +1,9 @@
 import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { Platform } from 'react-native';
+import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
-import { useAuth } from '../context'; // Importado usando tu index.ts
+import { useAuth, useTheme } from '../context';
 import ConfiguracionScreen from '../screens/configuracion/ConfiguracionScreen';
 import CuentasDetalleScreen from '../screens/cuentas/CuentasDetalleScreen';
 import NuevaCuentaScreen from '../screens/cuentas/NuevaCuentaScreen';
@@ -15,13 +16,24 @@ import { RootStackParamList } from '../types/navigation';
 import MainTabNavigator from './MainTabNavigator';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+const isLegacyAndroid = Platform.OS === 'android' && Number(Platform.Version) < 29;
 
 export default function AppNavigator() {
   const { isAuthenticated } = useAuth();
+  const { colors, isDark } = useTheme();
+  const navigationTheme = isDark
+    ? { ...DarkTheme, colors: { ...DarkTheme.colors, background: colors.background } }
+    : { ...DefaultTheme, colors: { ...DefaultTheme.colors, background: colors.background } };
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+    <NavigationContainer theme={navigationTheme}>
+      <Stack.Navigator
+        screenOptions={{
+          headerShown: false,
+          animation: isLegacyAndroid ? 'none' : 'slide_from_right',
+          contentStyle: { backgroundColor: colors.background, flex: 1 },
+        }}
+      >
         {isAuthenticated ? (
           // RUTA PRIVADA: Se muestra automáticamente al iniciar sesión
           <Stack.Group>

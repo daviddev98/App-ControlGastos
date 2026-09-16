@@ -9,7 +9,6 @@ import React, {
 import * as WebBrowser from 'expo-web-browser';
 import { Session, User } from '@supabase/supabase-js';
 import { makeRedirectUri } from 'expo-auth-session';
-import * as Linking from 'expo-linking';
 import * as QueryParams from 'expo-auth-session/build/QueryParams';
 import { supabase } from '../services/supabaseClient';
 import { store } from '../store';
@@ -65,12 +64,20 @@ export function AuthProvider({ children }: Props) {
   useEffect(() => {
     let isMounted = true;
 
+    const withTimeout = <T,>(promise: Promise<T>, ms: number): Promise<T> =>
+      Promise.race([
+        promise,
+        new Promise<T>((_, reject) => {
+          setTimeout(() => reject(new Error('Auth init timeout')), ms);
+        }),
+      ]);
+
     const initializeAuth = async () => {
       try {
-        const [{ data }, storedProfileImage] = await Promise.all([
-          supabase.auth.getSession(),
-          getStoredProfileImage(),
-        ]);
+        const [{ data }, storedProfileImage] = await withTimeout(
+          Promise.all([supabase.auth.getSession(), getStoredProfileImage()]),
+          8000
+        );
 
         if (!isMounted) {
           return;
@@ -79,6 +86,12 @@ export function AuthProvider({ children }: Props) {
         setSession(data.session);
         setUser(data.session?.user ?? null);
         setProfileImageUri(storedProfileImage);
+      } catch {
+        if (!isMounted) {
+          return;
+        }
+        setSession(null);
+        setUser(null);
       } finally {
         if (isMounted) {
           setIsLoading(false);

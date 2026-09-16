@@ -24,5 +24,10 @@
     "App.tsx",
     "assets"
   ],
+  "exclude": [
+    "src/App.test.tsx",
+    "src/setupTests.ts",
+    "src/reportWebVitals.ts"
+  ],
   "extends": "expo/tsconfig.base"
 }

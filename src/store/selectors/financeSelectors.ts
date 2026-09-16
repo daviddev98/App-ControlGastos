@@ -1,20 +1,22 @@
 import { createSelector } from '@reduxjs/toolkit';
 
 import { RootState } from '../index';
-import { buildMonthStatistics } from '../../utils/statistics';
+import { MovementItem } from '../../constants/sampleData';
 import { movimientosLista } from '../../structures/movimientosLista';
 import { cuentasIndice } from '../../structures/cuentasIndice';
 
+const EMPTY_MOVIMIENTOS: MovementItem[] = [];
+
 export const selectFinance = (state: RootState) => state.finance;
 
-export const selectMovimientosByMonth = (monthKey: string) =>
-  createSelector(selectFinance, (finance) => finance.movimientosByMonth[monthKey] ?? []);
+export const selectMovimientosByMonth = (state: RootState, monthKey: string) =>
+  state.finance?.movimientosByMonth?.[monthKey] ?? EMPTY_MOVIMIENTOS;
 
-export const selectMovimientosByAccount = (accountId: string) =>
-  createSelector(selectFinance, (finance) => finance.movimientosByAccount[accountId] ?? []);
+export const selectMovimientosByAccount = (state: RootState, accountId: string) =>
+  state.finance?.movimientosByAccount?.[accountId] ?? EMPTY_MOVIMIENTOS;
 
-export const selectMovimientoById = (movimientoId: string) =>
-  createSelector(selectFinance, () => movimientosLista.buscar(movimientoId));
+export const selectMovimientoById = (_state: RootState, movimientoId: string) =>
+  movimientoId ? movimientosLista.buscar(movimientoId) : undefined;
 
 export const selectPagosEnCola = createSelector(
   selectFinance,
@@ -26,11 +28,6 @@ export const selectSiguientePagoId = createSelector(
   (finance) => finance.siguientePagoId
 );
 
-export const selectMonthStatistics = (monthKey: string) =>
-  createSelector(selectMovimientosByMonth(monthKey), (movimientos) =>
-    buildMonthStatistics(movimientos, monthKey)
-  );
-
 export const selectMetas = createSelector(selectFinance, (finance) => finance.metas);
 
 export const selectSavingsMetas = createSelector(
@@ -38,15 +35,15 @@ export const selectSavingsMetas = createSelector(
   (finance) => finance.savingsMetas
 );
 
-export const selectSavingsMetaById = (metaId: string) =>
-  createSelector(selectSavingsMetas, (metas) => metas.find((meta) => meta.id === metaId));
+export const selectSavingsMetaById = (state: RootState, metaId: string) =>
+  metaId ? state.finance.savingsMetas.find((meta) => meta.id === metaId) : undefined;
 
 export const selectCardWallet = createSelector(selectFinance, (finance) => finance.cardWallet);
 
 export const selectAccounts = createSelector(selectFinance, (finance) => finance.accounts);
 
-export const selectAccountById = (accountId: string) =>
-  createSelector(selectFinance, () => cuentasIndice.obtener(accountId));
+export const selectAccountById = (_state: RootState, accountId: string) =>
+  cuentasIndice.obtener(accountId);
 
 export const selectAccountsNetBalance = createSelector(selectAccounts, (accounts) =>
   accounts.reduce((total, account) => {

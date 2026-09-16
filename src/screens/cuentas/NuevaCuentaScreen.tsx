@@ -1,6 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -11,7 +10,6 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { createNewAccountThunk } from '../../store/slices/financeSlice';
 import CustomButton from '../../components/CustomButton';
 import ScreenHeader from '../../components/ScreenHeader';
 import { Text } from '../../components/ui';
@@ -22,10 +20,11 @@ import {
   CardBrand,
 } from '../../constants/sampleData';
 import { radius, spacing } from '../../constants/theme';
+import { useToast } from '../../context/ToastContext';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import { ThemeColors } from '../../constants/themes';
 import { useAppDispatch } from '../../store/hooks';
-import { addAccount } from '../../store/slices/financeSlice';
+import { createNewAccountThunk } from '../../store/slices/financeSlice';
 import { RootStackParamList } from '../../types/navigation';
 import { isRequired, isValidAmount } from '../../utils/validation';
 
@@ -132,6 +131,7 @@ function ChipSelector<T extends string>({
 
 export default function NuevaCuentaScreen({ navigation }: Props) {
   const dispatch = useAppDispatch();
+  const { showToast } = useToast();
   const { colors } = useAppSettings();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -141,6 +141,8 @@ export default function NuevaCuentaScreen({ navigation }: Props) {
   const [balance, setBalance] = useState('');
   const [brand, setBrand] = useState<CardBrand>('mastercard');
   const [errors, setErrors] = useState<FormErrors>({});
+  const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   const validateForm = (): boolean => {
     const nextErrors: FormErrors = {};
@@ -168,28 +170,34 @@ export default function NuevaCuentaScreen({ navigation }: Props) {
   };
 
   const handleSubmit = async () => {
-  if (!validateForm()) return;
+    if (submittingRef.current || !validateForm()) return;
 
-  const parsedBalance = Number.parseFloat(balance.replace(',', '.'));
-  const colorIndex = Math.floor(Math.random() * CHART_COLORS.length);
+    const parsedBalance = Number.parseFloat(balance.replace(',', '.'));
+    const colorIndex = Math.floor(Math.random() * CHART_COLORS.length);
 
-  try {
-  await dispatch(createNewAccountThunk({
-    name: name.trim(),
-    subtitle: subtitle.trim(),
-    type: accountType,
-    balance: parsedBalance,
-    color: CHART_COLORS[colorIndex],
-    ...(accountType === 'credit_card' ? { brand } : {}),
-  })).unwrap();
+    submittingRef.current = true;
+    setSubmitting(true);
 
-  Alert.alert('Cuenta creada', 'La cuenta se guardó en la base de datos.', [
-    { text: 'OK', onPress: () => navigation.goBack() },
-  ]);
-} catch (error) {
-  Alert.alert('Error', 'No se pudo guardar la cuenta de ahorros.');
-}
-};
+    try {
+      await dispatch(
+        createNewAccountThunk({
+          name: name.trim(),
+          subtitle: subtitle.trim(),
+          type: accountType,
+          balance: parsedBalance,
+          color: CHART_COLORS[colorIndex],
+          ...(accountType === 'credit_card' ? { brand } : {}),
+        })
+      ).unwrap();
+
+      navigation.goBack();
+      showToast('Cuenta creada correctamente');
+    } catch {
+      submittingRef.current = false;
+      setSubmitting(false);
+      showToast('No se pudo guardar la cuenta.', { variant: 'error' });
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -253,7 +261,12 @@ export default function NuevaCuentaScreen({ navigation }: Props) {
             ) : null}
           </View>
 
-          <CustomButton title="Crear cuenta" onPress={handleSubmit} />
+          <CustomButton
+            title={submitting ? 'Creando cuenta...' : 'Crear cuenta'}
+            onPress={handleSubmit}
+            disabled={submitting}
+            loading={submitting}
+          />
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

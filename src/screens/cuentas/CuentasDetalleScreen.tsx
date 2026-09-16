@@ -29,8 +29,8 @@ export default function CuentasDetalleScreen({ navigation, route }: Props) {
   const { colors } = useAppSettings();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
-  const account = useAppSelector(selectAccountById(accountId));
-  const movimientos = useAppSelector(selectMovimientosByAccount(accountId));
+  const account = useAppSelector((state) => selectAccountById(state, accountId));
+  const movimientos = useAppSelector((state) => selectMovimientosByAccount(state, accountId));
 
   const wallet: CardWalletData = useMemo(() => {
     if (account?.type === 'credit_card' && account.brand) {
