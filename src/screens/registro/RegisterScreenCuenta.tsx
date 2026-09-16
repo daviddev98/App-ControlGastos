@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, View, Alert } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import CustomButton from '../../components/CustomButton';
 import CustomInput from '../../components/CustomInput';
 import { Text } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
+import { useToast } from '../../context/ToastContext';
 import { spacing } from '../../constants/theme';
 import { RootStackParamList } from '../../types/navigation';
 import {
@@ -26,6 +27,7 @@ type FormErrors = {
 
 export default function RegisterScreen({ navigation }: Props) {
   const { colors } = useTheme();
+  const { showToast } = useToast();
   const { signUp, signInWithGoogle } = useAuth();
   const [name, setName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -65,7 +67,7 @@ export default function RegisterScreen({ navigation }: Props) {
   };
 
   const handleRegister = async () => {
-    if (!validateForm()) return;
+    if (loading || !validateForm()) return;
 
     setLoading(true);
 
@@ -77,36 +79,24 @@ export default function RegisterScreen({ navigation }: Props) {
     setLoading(false);
 
     if (error) {
-      Alert.alert('Error al registrarse', error);
+      showToast(error, { variant: 'error' });
       return;
     }
 
-    Alert.alert(
-      '¡Registro exitoso!',
-      'Tu cuenta fue creada correctamente. Revisa tu correo si se requiere confirmación.',
-      [
-        {
-          text: 'Ir a Iniciar sesión',
-          onPress: () => navigation.navigate('Login'),
-        },
-      ]
-    );
+    showToast('Cuenta creada. Inicia sesión para continuar.');
+    navigation.navigate('Login');
   };
 
   const handleGoogleSignUp = async () => {
     setLoading(true);
 
-    const { error, success } = await signInWithGoogle();
+    const { error } = await signInWithGoogle();
 
     setLoading(false);
 
     if (error) {
-      Alert.alert('Error con Google', error);
+      showToast(error, { variant: 'error' });
       return;
-    }
-
-    if (success) {
-      navigation.replace('MainTabs');
     }
   };
 
@@ -156,6 +146,8 @@ export default function RegisterScreen({ navigation }: Props) {
           <CustomButton
             title={loading ? 'Registrando...' : 'Registrarse'}
             onPress={handleRegister}
+            disabled={loading}
+            loading={loading}
           />
 
           <CustomButton title="Registrarse con Google" onPress={handleGoogleSignUp} />

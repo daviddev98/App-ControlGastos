@@ -120,6 +120,38 @@ export const createNewAccountThunk = createAsyncThunk(
   }
 );
 
+export const deleteAccountThunk = createAsyncThunk(
+  'finance/deleteAccount',
+  async (
+    { accountId, accountName }: { accountId: string; accountName: string },
+    { rejectWithValue }
+  ) => {
+    try {
+      const userId = await obtenerUsuarioId();
+
+      const { error: movementsError } = await supabase
+        .from('movimientos')
+        .delete()
+        .eq('user_id', userId)
+        .eq('bank_account', accountName);
+
+      if (movementsError) throw movementsError;
+
+      const { error: accountError } = await supabase
+        .from('cuentas')
+        .delete()
+        .eq('id', accountId)
+        .eq('user_id', userId);
+
+      if (accountError) throw accountError;
+
+      return { accountId, accountName };
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Error al eliminar la cuenta.');
+    }
+  }
+);
+
 export const addMovimientoThunk = createAsyncThunk(
   'finance/addMovimiento',
   async (movementData: CreateMovementPayload, { rejectWithValue }) => {
@@ -676,6 +708,14 @@ const financeSlice = createSlice({
         cuentasIndice.establecer(action.payload);
         sincronizarCuentasEnEstado(state);
         sincronizarMovimientosEnEstado(state);
+      })
+      .addCase(deleteAccountThunk.fulfilled, (state, action) => {
+        movimientosLista.eliminarPorCuenta(action.payload.accountName);
+        historialMovimientos.vaciar();
+        cuentasIndice.eliminar(action.payload.accountId);
+        sincronizarCuentasEnEstado(state);
+        sincronizarMovimientosEnEstado(state);
+        sincronizarHistorialEnEstado(state);
       })
       .addCase(addMovimientoThunk.fulfilled, (state, action) => {
         historialMovimientos.registrarCrear(action.payload);

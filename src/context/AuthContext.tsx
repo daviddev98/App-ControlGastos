@@ -4,8 +4,10 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
+import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { Session, User } from '@supabase/supabase-js';
 import { makeRedirectUri } from 'expo-auth-session';
@@ -20,6 +22,29 @@ import {
 } from '../services/storage';
 
 WebBrowser.maybeCompleteAuthSession();
+
+const OAUTH_CALLBACK_PATH = 'auth/callback';
+
+// En Expo Go el callback es exp://<host>/--/auth/callback; GoTrue rechaza IPs privadas,
+// así que la sesión de Google exige `expo start --tunnel`. En un dev build queda
+// controldegastos://auth/callback y funciona por LAN.
+function getOAuthRedirectUri(): string {
+  return makeRedirectUri({
+    scheme: 'controldegastos',
+    path: OAUTH_CALLBACK_PATH,
+  });
+}
+
+function isOAuthCallbackUrl(url: string): boolean {
+  const hasTokens = url.includes('access_token=') || url.includes('refresh_token=');
+  const hasCode = /[?&#]code=/.test(url);
+  const isAppCallback =
+    url.includes(OAUTH_CALLBACK_PATH) || url.startsWith('controldegastos://');
+
+  return hasTokens || (hasCode && isAppCallback);
+}
+
+const oauthUrlJobs = new Map<string, Promise<{ error: string | null; sessionSet: boolean }>>();
 
 type SignUpOptions = {
   fullName: string;
@@ -51,6 +76,54 @@ function extractToken(url: string, key: string): string | null {
   return matches ? matches[1] : null;
 }
 
+async function createSessionFromUrl(url: string): Promise<{ error: string | null; sessionSet: boolean }> {
+  const existing = oauthUrlJobs.get(url);
+  if (existing) {
+    return existing;
+  }
+
+  const job = (async () => {
+    const urlToParse = url.replace('#', '?');
+    const { params, errorCode } = QueryParams.getQueryParams(urlToParse);
+
+    if (errorCode) {
+      return { error: errorCode, sessionSet: false };
+    }
+
+    if (params.code) {
+      const { error } = await supabase.auth.exchangeCodeForSession(params.code);
+      return { error: error?.message ?? null, sessionSet: !error };
+    }
+
+    const accessToken = params.access_token || extractToken(url, 'access_token');
+    const refreshToken = params.refresh_token || extractToken(url, 'refresh_token');
+
+    if (!accessToken || !refreshToken) {
+      return { error: null, sessionSet: false };
+    }
+
+    const { error } = await supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    });
+
+    return { error: error?.message ?? null, sessionSet: !error };
+  })();
+
+  oauthUrlJobs.set(url, job);
+
+  try {
+    const result = await job;
+    if (!result.sessionSet) {
+      oauthUrlJobs.delete(url);
+    }
+    return result;
+  } catch (error) {
+    oauthUrlJobs.delete(url);
+    throw error;
+  }
+}
+
 type Props = {
   children: React.ReactNode;
 };
@@ -60,6 +133,7 @@ export function AuthProvider({ children }: Props) {
   const [user, setUser] = useState<User | null>(null);
   const [profileImageUri, setProfileImageUri] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const ignoreAuthEventsRef = useRef(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -103,7 +177,11 @@ export function AuthProvider({ children }: Props) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    } =       supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (ignoreAuthEventsRef.current) {
+        return;
+      }
+
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
 
@@ -115,6 +193,35 @@ export function AuthProvider({ children }: Props) {
     return () => {
       isMounted = false;
       subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    const handledUrls = new Set<string>();
+
+    const handleUrl = async (url: string | null) => {
+      if (!url || !isOAuthCallbackUrl(url) || handledUrls.has(url)) {
+        return;
+      }
+
+      handledUrls.add(url);
+      const { error } = await createSessionFromUrl(url);
+
+      if (error) {
+        handledUrls.delete(url);
+      }
+    };
+
+    void Linking.getInitialURL().then((url) => {
+      void handleUrl(url);
+    });
+
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      void handleUrl(url);
+    });
+
+    return () => {
+      subscription.remove();
     };
   }, []);
 
@@ -140,38 +247,45 @@ export function AuthProvider({ children }: Props) {
 
   const signUp = useCallback(
     async (email: string, password: string, options: SignUpOptions) => {
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password: password.trim(),
-        options: {
-          data: {
-            full_name: options.fullName.trim(),
-            phone_number: options.phoneNumber.trim(),
+      ignoreAuthEventsRef.current = true;
+
+      try {
+        const { data, error } = await supabase.auth.signUp({
+          email: email.trim(),
+          password: password.trim(),
+          options: {
+            data: {
+              full_name: options.fullName.trim(),
+              phone_number: options.phoneNumber.trim(),
+            },
           },
-        },
-      });
+        });
 
-      if (error) {
-        return { error: error.message, needsEmailConfirmation: false };
+        if (error) {
+          return { error: error.message, needsEmailConfirmation: false };
+        }
+
+        if (data.session) {
+          await supabase.auth.signOut();
+        }
+
+        setSession(null);
+        setUser(null);
+
+        return {
+          error: null,
+          needsEmailConfirmation: !data.session,
+        };
+      } finally {
+        ignoreAuthEventsRef.current = false;
       }
-
-      return {
-        error: null,
-        needsEmailConfirmation: !data.session,
-      };
     },
     []
   );
 
   const signInWithGoogle = useCallback(async () => {
     try {
-
-      const redirectTo = makeRedirectUri({
-        scheme: 'controldegastos',
-        preferLocalhost: false,
-      });
-
-      console.log('REDIRECT_URL_EXPO:', redirectTo)
+      const redirectTo = getOAuthRedirectUri();
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -191,36 +305,29 @@ export function AuthProvider({ children }: Props) {
 
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
 
-      if (result.type !== 'success' || !result.url) {
-        return { error: null, success: false };
-      }
+      if (result.type === 'success' && result.url) {
+        const { error: sessionError, sessionSet } = await createSessionFromUrl(result.url);
 
-      const urlToParse = result.url.replace('#', '?');
-      const { params, errorCode } = QueryParams.getQueryParams(urlToParse);
-
-      const accessToken = params.access_token || extractToken(result.url, 'access_token');
-      const refreshToken = params.refresh_token || extractToken(result.url, 'refresh_token');
-
-      if (errorCode || !accessToken || !refreshToken) {
-        return { error: 'No se pudieron recuperar los tokens de inicio de sesión.', success: false };
-      }
-
-      const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken,
-      });
-
-      if (sessionError) {
-        return { error: sessionError.message, success: false };
-      }
-
-      if (sessionData.session) {
-        setSession(sessionData.session);
-        setUser(sessionData.session.user);
-
-        if (sessionData.session.user.email) {
-          await setStoredEmail(sessionData.session.user.email);
+        if (sessionError) {
+          return { error: sessionError, success: false };
         }
+
+        if (!sessionSet) {
+          return { error: 'No se pudieron recuperar los tokens de inicio de sesión.', success: false };
+        }
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        const { data: sessionData } = await supabase.auth.getSession();
+
+        if (!sessionData.session) {
+          return { error: null, success: false };
+        }
+      }
+
+      const { data: sessionData } = await supabase.auth.getSession();
+
+      if (sessionData.session?.user.email) {
+        await setStoredEmail(sessionData.session.user.email);
       }
 
       setProfileImageUri(null);

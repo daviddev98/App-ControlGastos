@@ -73,17 +73,13 @@ export default function LoginScreen({ navigation }: Props) {
   const handleGoogleLogin = async () => {
     setLoadingGoogle(true);
 
-    const { error, success } = await signInWithGoogle();
+    const { error } = await signInWithGoogle();
 
     setLoadingGoogle(false);
 
     if (error) {
       Alert.alert('Error de autenticación', error);
       return;
-    }
-
-    if (success) {
-      navigation.replace('MainTabs');
     }
   };
 

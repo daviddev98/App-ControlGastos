@@ -46,6 +46,10 @@ export const movimientosLista = {
     }
   },
 
+  eliminarPorCuenta(accountName: string): number {
+    return listaMovimientos.eliminarTodos((item) => item.bankAccount === accountName);
+  },
+
   vaciar(): void {
     listaMovimientos.vaciar();
   },

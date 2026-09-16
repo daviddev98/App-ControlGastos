@@ -9,6 +9,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
         storage: AsyncStorage,
         autoRefreshToken: true,
         persistSession: true,
-        detectSessionInUrl: false, // Evita conflictos con el Site URL web de Supabase
+        detectSessionInUrl: false,
+        flowType: 'pkce',
     },
 });
