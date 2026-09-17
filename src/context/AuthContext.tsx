@@ -36,12 +36,17 @@ function getOAuthRedirectUri(): string {
 }
 
 function isOAuthCallbackUrl(url: string): boolean {
+  if (!url) return false;
   const hasTokens = url.includes('access_token=') || url.includes('refresh_token=');
+  const hasTokenHash = url.includes('token_hash=') || url.includes('token=');
   const hasCode = /[?&#]code=/.test(url);
+  const hasAuthError = url.includes('error_description=') || url.includes('error=');
   const isAppCallback =
-    url.includes(OAUTH_CALLBACK_PATH) || url.startsWith('controldegastos://');
+    url.includes(OAUTH_CALLBACK_PATH) ||
+    url.startsWith('controldegastos://') ||
+    url.includes('--/auth/callback');
 
-  return hasTokens || (hasCode && isAppCallback);
+  return hasTokens || hasTokenHash || hasAuthError || hasCode || isAppCallback;
 }
 
 const oauthUrlJobs = new Map<string, Promise<{ error: string | null; sessionSet: boolean }>>();
@@ -72,8 +77,8 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 function extractToken(url: string, key: string): string | null {
-  const matches = url.match(new RegExp(`${key}=([^&]*)`));
-  return matches ? matches[1] : null;
+  const matches = url.match(new RegExp(`[?&#]${key}=([^&#]*)`));
+  return matches ? decodeURIComponent(matches[1]) : null;
 }
 
 async function createSessionFromUrl(url: string): Promise<{ error: string | null; sessionSet: boolean }> {
@@ -83,31 +88,57 @@ async function createSessionFromUrl(url: string): Promise<{ error: string | null
   }
 
   const job = (async () => {
-    const urlToParse = url.replace('#', '?');
-    const { params, errorCode } = QueryParams.getQueryParams(urlToParse);
+    try {
+      const urlToParse = url.replace('#', '?');
+      const { params, errorCode } = QueryParams.getQueryParams(urlToParse);
 
-    if (errorCode) {
-      return { error: errorCode, sessionSet: false };
-    }
+      if (errorCode) {
+        return { error: errorCode, sessionSet: false };
+      }
 
-    if (params.code) {
-      const { error } = await supabase.auth.exchangeCodeForSession(params.code);
-      return { error: error?.message ?? null, sessionSet: !error };
-    }
+      const errorDescription = params.error_description || extractToken(url, 'error_description');
+      const errorMsg = params.error || extractToken(url, 'error');
+      if (errorDescription || errorMsg) {
+        return { error: errorDescription || errorMsg, sessionSet: false };
+      }
 
-    const accessToken = params.access_token || extractToken(url, 'access_token');
-    const refreshToken = params.refresh_token || extractToken(url, 'refresh_token');
+      // 1. Tokens directos (flujo implicit / enlaces OAuth o hash)
+      const accessToken = params.access_token || extractToken(url, 'access_token');
+      const refreshToken = params.refresh_token || extractToken(url, 'refresh_token');
 
-    if (!accessToken || !refreshToken) {
+      if (accessToken && refreshToken) {
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+
+        return { error: error?.message ?? null, sessionSet: !error };
+      }
+
+      // 2. Token hash para confirmación de email / magic link
+      const tokenHash = params.token_hash || extractToken(url, 'token_hash');
+      const type = (params.type || extractToken(url, 'type')) as any;
+
+      if (tokenHash && type) {
+        const { error } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: type,
+        });
+
+        return { error: error?.message ?? null, sessionSet: !error };
+      }
+
+      // 3. Código de intercambio (si viene con flow code)
+      const code = params.code || extractToken(url, 'code');
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        return { error: error?.message ?? null, sessionSet: !error };
+      }
+
       return { error: null, sessionSet: false };
+    } catch (err: any) {
+      return { error: err?.message || 'Error al procesar enlace de autenticación', sessionSet: false };
     }
-
-    const { error } = await supabase.auth.setSession({
-      access_token: accessToken,
-      refresh_token: refreshToken,
-    });
-
-    return { error: error?.message ?? null, sessionSet: !error };
   })();
 
   oauthUrlJobs.set(url, job);
