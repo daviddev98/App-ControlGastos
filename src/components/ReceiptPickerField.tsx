@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import {
   Alert,
   Image,
+  Linking,
   Modal,
   Pressable,
   StatusBar,
@@ -24,11 +25,22 @@ type Props = {
 };
 
 async function pickFromLibrary(): Promise<string | null> {
-  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!permission.granted) {
+  const current = await ImagePicker.getMediaLibraryPermissionsAsync();
+  let granted = current.granted;
+
+  if (!granted && current.canAskAgain) {
+    const requested = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    granted = requested.granted;
+  }
+
+  if (!granted) {
     Alert.alert(
       'Permiso requerido',
-      'Necesitamos acceso a tus fotos para adjuntar el comprobante.'
+      'Necesitamos acceso a tus fotos para adjuntar el comprobante. Por favor, actívalo en los ajustes de tu dispositivo.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Abrir ajustes', onPress: () => Linking.openSettings() },
+      ]
     );
     return null;
   }
@@ -42,11 +54,22 @@ async function pickFromLibrary(): Promise<string | null> {
 }
 
 async function pickFromCamera(): Promise<string | null> {
-  const permission = await ImagePicker.requestCameraPermissionsAsync();
-  if (!permission.granted) {
+  const current = await ImagePicker.getCameraPermissionsAsync();
+  let granted = current.granted;
+
+  if (!granted && current.canAskAgain) {
+    const requested = await ImagePicker.requestCameraPermissionsAsync();
+    granted = requested.granted;
+  }
+
+  if (!granted) {
     Alert.alert(
       'Permiso requerido',
-      'Necesitamos la cámara para fotografiar la factura o el comprobante.'
+      'Necesitamos la cámara para fotografiar la factura o el comprobante. Por favor, actívala en los ajustes de tu dispositivo.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Abrir ajustes', onPress: () => Linking.openSettings() },
+      ]
     );
     return null;
   }

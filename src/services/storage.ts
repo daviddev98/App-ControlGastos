@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export const STORAGE_KEYS = {
   THEME: '@app_theme',
   USER_EMAIL: '@user_email',
-  PROFILE_IMAGE: '@profile_image',
+  PROFILE_IMAGE_PREFIX: '@profile_image_',
 } as const;
 
 export type ThemeMode = 'light' | 'dark';
@@ -25,10 +25,21 @@ export async function setStoredEmail(email: string): Promise<void> {
   await AsyncStorage.setItem(STORAGE_KEYS.USER_EMAIL, email);
 }
 
-export async function getStoredProfileImage(): Promise<string | null> {
-  return AsyncStorage.getItem(STORAGE_KEYS.PROFILE_IMAGE);
+export function getUserProfileImageKey(userId: string): string {
+  return `${STORAGE_KEYS.PROFILE_IMAGE_PREFIX}${userId}`;
 }
 
-export async function setStoredProfileImage(uri: string): Promise<void> {
-  await AsyncStorage.setItem(STORAGE_KEYS.PROFILE_IMAGE, uri);
+export async function getStoredProfileImage(userId?: string | null): Promise<string | null> {
+  if (!userId) return null;
+  return AsyncStorage.getItem(getUserProfileImageKey(userId));
 }
+
+export async function setStoredProfileImage(userId: string, uri: string): Promise<void> {
+  if (!userId) return;
+  if (!uri) {
+    await AsyncStorage.removeItem(getUserProfileImageKey(userId));
+  } else {
+    await AsyncStorage.setItem(getUserProfileImageKey(userId), uri);
+  }
+}
+

@@ -159,6 +159,35 @@ type Props = {
   children: React.ReactNode;
 };
 
+async function resolveUserProfileImage(currentUser: User | null): Promise<string | null> {
+  if (!currentUser?.id) {
+    return null;
+  }
+
+  try {
+    // 1. Buscar en almacenamiento local específico para este usuario
+    const cachedUri = await getStoredProfileImage(currentUser.id);
+    if (cachedUri) {
+      return cachedUri;
+    }
+
+    // 2. Buscar en los metadatos de Supabase Auth (avatar_url o foto OAuth)
+    const metadataAvatar =
+      (currentUser.user_metadata?.avatar_url as string | undefined) ||
+      (currentUser.user_metadata?.picture as string | undefined) ||
+      null;
+
+    if (metadataAvatar) {
+      void setStoredProfileImage(currentUser.id, metadataAvatar);
+      return metadataAvatar;
+    }
+  } catch (error) {
+    console.warn('Error resolviendo imagen de perfil del usuario:', error);
+  }
+
+  return null;
+}
+
 export function AuthProvider({ children }: Props) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -179,24 +208,31 @@ export function AuthProvider({ children }: Props) {
 
     const initializeAuth = async () => {
       try {
-        const [{ data }, storedProfileImage] = await withTimeout(
-          Promise.all([supabase.auth.getSession(), getStoredProfileImage()]),
-          8000
-        );
+        const { data } = await withTimeout(supabase.auth.getSession(), 8000);
 
         if (!isMounted) {
           return;
         }
 
         setSession(data.session);
-        setUser(data.session?.user ?? null);
-        setProfileImageUri(storedProfileImage);
+        const currentUser = data.session?.user ?? null;
+        setUser(currentUser);
+
+        if (currentUser) {
+          const userImage = await resolveUserProfileImage(currentUser);
+          if (isMounted) {
+            setProfileImageUri(userImage);
+          }
+        } else {
+          setProfileImageUri(null);
+        }
       } catch {
         if (!isMounted) {
           return;
         }
         setSession(null);
         setUser(null);
+        setProfileImageUri(null);
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -208,16 +244,23 @@ export function AuthProvider({ children }: Props) {
 
     const {
       data: { subscription },
-    } =       supabase.auth.onAuthStateChange((_event, nextSession) => {
+    } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
       if (ignoreAuthEventsRef.current) {
         return;
       }
 
       setSession(nextSession);
-      setUser(nextSession?.user ?? null);
+      const nextUser = nextSession?.user ?? null;
+      setUser(nextUser);
 
-      if (nextSession?.user?.email) {
-        void setStoredEmail(nextSession.user.email);
+      if (nextUser) {
+        if (nextUser.email) {
+          void setStoredEmail(nextUser.email);
+        }
+        const userImage = await resolveUserProfileImage(nextUser);
+        setProfileImageUri(userImage);
+      } else {
+        setProfileImageUri(null);
       }
     });
 
@@ -270,8 +313,12 @@ export function AuthProvider({ children }: Props) {
       await setStoredEmail(data.user.email);
     }
 
-    setProfileImageUri(null);
-    await setStoredProfileImage('');
+    if (data.user) {
+      const userImage = await resolveUserProfileImage(data.user);
+      setProfileImageUri(userImage);
+    } else {
+      setProfileImageUri(null);
+    }
 
     return { error: null };
   }, []);
@@ -361,8 +408,12 @@ export function AuthProvider({ children }: Props) {
         await setStoredEmail(sessionData.session.user.email);
       }
 
-      setProfileImageUri(null);
-      await setStoredProfileImage('');
+      if (sessionData.session?.user) {
+        const userImage = await resolveUserProfileImage(sessionData.session.user);
+        setProfileImageUri(userImage);
+      } else {
+        setProfileImageUri(null);
+      }
 
       return { error: null, success: true };
     } catch {
@@ -378,21 +429,54 @@ export function AuthProvider({ children }: Props) {
     }
 
     setProfileImageUri(null);
-    await Promise.all([setStoredEmail(''), setStoredProfileImage('')]);
+    await setStoredEmail('');
     store.dispatch(resetFinanceState());
 
     return { error: null };
   }, []);
 
-  const saveProfileImage = useCallback(async (uri: string) => {
-    setProfileImageUri(uri);
-    await setStoredProfileImage(uri);
-  }, []);
+  const saveProfileImage = useCallback(
+    async (uri: string) => {
+      setProfileImageUri(uri);
+
+      if (user?.id) {
+        await setStoredProfileImage(user.id, uri);
+
+        try {
+          const { data, error } = await supabase.auth.updateUser({
+            data: { avatar_url: uri },
+          });
+
+          if (!error && data?.user) {
+            setUser(data.user);
+          }
+        } catch (error) {
+          console.warn('Error al persistir avatar_url en metadatos de usuario:', error);
+        }
+      }
+    },
+    [user?.id]
+  );
 
   const clearProfileImage = useCallback(async () => {
     setProfileImageUri(null);
-    await setStoredProfileImage('');
-  }, []);
+
+    if (user?.id) {
+      await setStoredProfileImage(user.id, '');
+
+      try {
+        const { data, error } = await supabase.auth.updateUser({
+          data: { avatar_url: null },
+        });
+
+        if (!error && data?.user) {
+          setUser(data.user);
+        }
+      } catch (error) {
+        console.warn('Error al limpiar avatar_url en metadatos de usuario:', error);
+      }
+    }
+  }, [user?.id]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
