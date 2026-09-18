@@ -734,6 +734,52 @@ export const updateSavingsMetaThunk = createAsyncThunk(
   }
 );
 
+export const deleteSavingsMetaThunk = createAsyncThunk(
+  'finance/deleteSavingsMeta',
+  async (metaId: string, { rejectWithValue }) => {
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData.user) throw new Error('Usuario no autenticado.');
+
+      const { error } = await supabase
+        .from('ahorros_metas')
+        .delete()
+        .eq('id', metaId)
+        .eq('user_id', userData.user.id);
+
+      if (error) throw error;
+
+      return metaId;
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Error al eliminar la meta.');
+    }
+  }
+);
+
+export const deleteMultipleSavingsMetasThunk = createAsyncThunk(
+  'finance/deleteMultipleSavingsMetas',
+  async (metaIds: string[], { rejectWithValue }) => {
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData.user) throw new Error('Usuario no autenticado.');
+
+      if (metaIds.length === 0) return [];
+
+      const { error } = await supabase
+        .from('ahorros_metas')
+        .delete()
+        .in('id', metaIds)
+        .eq('user_id', userData.user.id);
+
+      if (error) throw error;
+
+      return metaIds;
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Error al eliminar las metas seleccionadas.');
+    }
+  }
+);
+
 export const fetchMovimientosByMonthThunk = createAsyncThunk(
   'finance/fetchMovimientosByMonth',
   async (monthKey: string, { rejectWithValue }) => {
@@ -1064,6 +1110,21 @@ const financeSlice = createSlice({
         const index = state.savingsMetas.findIndex((meta) => meta.id === action.payload.id);
         if (index !== -1) {
           state.savingsMetas[index] = action.payload;
+        }
+        sincronizarRankingEnEstado(state);
+      })
+      .addCase(deleteSavingsMetaThunk.fulfilled, (state, action) => {
+        state.savingsMetas = state.savingsMetas.filter((meta) => meta.id !== action.payload);
+        if (state.metaBuscadaId === action.payload) {
+          state.metaBuscadaId = null;
+        }
+        sincronizarRankingEnEstado(state);
+      })
+      .addCase(deleteMultipleSavingsMetasThunk.fulfilled, (state, action) => {
+        const deletedIds = new Set(action.payload);
+        state.savingsMetas = state.savingsMetas.filter((meta) => !deletedIds.has(meta.id));
+        if (state.metaBuscadaId && deletedIds.has(state.metaBuscadaId)) {
+          state.metaBuscadaId = null;
         }
         sincronizarRankingEnEstado(state);
       })

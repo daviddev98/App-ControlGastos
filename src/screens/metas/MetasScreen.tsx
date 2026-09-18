@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,7 +18,11 @@ import {
   selectRankingInorden,
   selectSavingsMetas,
 } from '../../store/selectors/financeSelectors';
-import { fetchSavingsMetasThunk, setMetaBuscadaId } from '../../store/slices/financeSlice';
+import {
+  deleteMultipleSavingsMetasThunk,
+  fetchSavingsMetasThunk,
+  setMetaBuscadaId,
+} from '../../store/slices/financeSlice';
 import { rankingMetas } from '../../structures/rankingMetas';
 import { RootStackParamList } from '../../types/navigation';
 import { formatLPS } from '../../utils/currency';
@@ -38,6 +42,11 @@ export default function MetasScreen() {
   const [mensajeBusqueda, setMensajeBusqueda] = useState<string | null>(null);
   const [esErrorBusqueda, setEsErrorBusqueda] = useState(false);
 
+  // Estado del modo selección
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const loadMetas = useCallback(() => {
     dispatch(fetchSavingsMetasThunk());
   }, [dispatch]);
@@ -45,6 +54,9 @@ export default function MetasScreen() {
   useFocusEffect(
     useCallback(() => {
       loadMetas();
+      // Salir del modo selección al volver a esta pantalla
+      setIsSelectionMode(false);
+      setSelectedIds(new Set());
     }, [loadMetas])
   );
 
@@ -59,12 +71,86 @@ export default function MetasScreen() {
   };
 
   const handleMetaPress = (meta: SavingsMeta) => {
-    navigation.navigate('MetaForm', { metaId: meta.id });
+    if (isSelectionMode) {
+      toggleSelection(meta.id);
+    } else {
+      navigation.navigate('MetaForm', { metaId: meta.id });
+    }
   };
 
   const handleCreateMeta = () => {
     navigation.navigate('MetaForm');
   };
+
+  // ── Selección ──────────────────────────────────────────────────────────────
+
+  const enterSelectionMode = () => {
+    setIsSelectionMode(true);
+    setSelectedIds(new Set());
+    dispatch(setMetaBuscadaId(null));
+    setMensajeBusqueda(null);
+  };
+
+  const exitSelectionMode = () => {
+    setIsSelectionMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const toggleSelection = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    setSelectedIds(new Set(rankingInorden.map((m) => m.id)));
+  };
+
+  const deselectAll = () => {
+    setSelectedIds(new Set());
+  };
+
+  const allSelected =
+    rankingInorden.length > 0 && selectedIds.size === rankingInorden.length;
+
+  const handleDeleteSelected = () => {
+    if (selectedIds.size === 0) return;
+
+    Alert.alert(
+      'Eliminar metas',
+      selectedIds.size === 1
+        ? '¿Estás seguro de que deseas eliminar esta meta? Esta acción no se puede deshacer.'
+        : `¿Estás seguro de que deseas eliminar ${selectedIds.size} metas? Esta acción no se puede deshacer.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            setIsDeleting(true);
+            try {
+              await dispatch(
+                deleteMultipleSavingsMetasThunk(Array.from(selectedIds))
+              ).unwrap();
+              exitSelectionMode();
+            } catch {
+              Alert.alert('Error', 'No se pudieron eliminar las metas seleccionadas.');
+            } finally {
+              setIsDeleting(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // ── Búsqueda ───────────────────────────────────────────────────────────────
 
   const handleBuscarMeta = () => {
     const termino = criterioBusqueda.trim();
@@ -143,60 +229,85 @@ export default function MetasScreen() {
           </View>
         </View>
 
-        <Card style={styles.searchCard}>
-          <CardContent style={styles.searchContent}>
-            <View style={styles.searchRow}>
-              <View style={styles.searchInputContainer}>
-                <Ionicons name="search-outline" size={18} color={colors.mutedForeground} />
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Buscar por monto o nombre..."
-                  placeholderTextColor={colors.muted}
-                  value={criterioBusqueda}
-                  onChangeText={setCriterioBusqueda}
-                  onSubmitEditing={handleBuscarMeta}
-                  returnKeyType="search"
-                />
-                {criterioBusqueda.length > 0 && (
-                  <Pressable onPress={handleLimpiarBusqueda} style={styles.clearSearchButton}>
-                    <Ionicons name="close-circle" size={18} color={colors.mutedForeground} />
-                  </Pressable>
-                )}
+        {/* Buscador — oculto en modo selección */}
+        {!isSelectionMode && (
+          <Card style={styles.searchCard}>
+            <CardContent style={styles.searchContent}>
+              <View style={styles.searchRow}>
+                <View style={styles.searchInputContainer}>
+                  <Ionicons name="search-outline" size={18} color={colors.mutedForeground} />
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Buscar por monto o nombre..."
+                    placeholderTextColor={colors.muted}
+                    value={criterioBusqueda}
+                    onChangeText={setCriterioBusqueda}
+                    onSubmitEditing={handleBuscarMeta}
+                    returnKeyType="search"
+                  />
+                  {criterioBusqueda.length > 0 && (
+                    <Pressable onPress={handleLimpiarBusqueda} style={styles.clearSearchButton}>
+                      <Ionicons name="close-circle" size={18} color={colors.mutedForeground} />
+                    </Pressable>
+                  )}
+                </View>
+                <Button
+                  size="sm"
+                  onPress={handleBuscarMeta}
+                  style={[styles.searchBtn, { backgroundColor: colors.primary }]}
+                >
+                  <Ionicons name="search" size={16} color={colors.primaryForeground} />
+                </Button>
               </View>
-              <Button
-                size="sm"
-                onPress={handleBuscarMeta}
-                style={[styles.searchBtn, { backgroundColor: colors.primary }]}
-              >
-                <Ionicons name="search" size={16} color={colors.primaryForeground} />
-              </Button>
-            </View>
 
-            {mensajeBusqueda && (
-              <View
-                style={[
-                  styles.searchFeedback,
-                  esErrorBusqueda ? styles.searchFeedbackError : styles.searchFeedbackSuccess,
-                ]}
-              >
-                <Ionicons
-                  name={esErrorBusqueda ? 'alert-circle-outline' : 'checkmark-circle-outline'}
-                  size={16}
-                  color={esErrorBusqueda ? colors.destructive : colors.success}
-                />
-                <Text
-                  variant="muted"
+              {mensajeBusqueda && (
+                <View
                   style={[
-                    styles.searchFeedbackText,
-                    { color: esErrorBusqueda ? colors.destructive : colors.success },
+                    styles.searchFeedback,
+                    esErrorBusqueda ? styles.searchFeedbackError : styles.searchFeedbackSuccess,
                   ]}
                 >
-                  {mensajeBusqueda}
-                </Text>
-              </View>
-            )}
-          </CardContent>
-        </Card>
+                  <Ionicons
+                    name={esErrorBusqueda ? 'alert-circle-outline' : 'checkmark-circle-outline'}
+                    size={16}
+                    color={esErrorBusqueda ? colors.destructive : colors.success}
+                  />
+                  <Text
+                    variant="muted"
+                    style={[
+                      styles.searchFeedbackText,
+                      { color: esErrorBusqueda ? colors.destructive : colors.success },
+                    ]}
+                  >
+                    {mensajeBusqueda}
+                  </Text>
+                </View>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Barra de modo selección */}
+        {isSelectionMode && (
+          <View style={styles.selectionBar}>
+            <Pressable onPress={exitSelectionMode} style={styles.selectionBarAction}>
+              <Ionicons name="close" size={20} color={colors.foreground} />
+            </Pressable>
+            <Text style={styles.selectionBarTitle}>
+              {selectedIds.size === 0
+                ? 'Selecciona metas'
+                : `${selectedIds.size} seleccionada${selectedIds.size > 1 ? 's' : ''}`}
+            </Text>
+            <Pressable
+              onPress={allSelected ? deselectAll : selectAll}
+              style={styles.selectionBarAction}
+            >
+              <Text style={[styles.selectionBarActionText, { color: colors.primary }]}>
+                {allSelected ? 'Ninguna' : 'Todas'}
+              </Text>
+            </Pressable>
+          </View>
+        )}
 
         <View style={styles.traversalSection}>
           <View style={styles.sectionHeader}>
@@ -207,9 +318,48 @@ export default function MetasScreen() {
               </Text>
             </View>
 
-            <Button variant="outline" size="icon" onPress={handleCreateMeta}>
-              <Ionicons name="add" size={20} color={colors.foreground} />
-            </Button>
+            <View style={styles.sectionActions}>
+              {!isSelectionMode ? (
+                <>
+                  {rankingInorden.length > 0 && (
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onPress={enterSelectionMode}
+                      accessibilityLabel="Seleccionar metas para eliminar"
+                    >
+                      <Ionicons name="checkmark-circle-outline" size={20} color={colors.foreground} />
+                    </Button>
+                  )}
+                  <Button variant="outline" size="icon" onPress={handleCreateMeta}>
+                    <Ionicons name="add" size={20} color={colors.foreground} />
+                  </Button>
+                </>
+              ) : (
+                <Pressable
+                  onPress={handleDeleteSelected}
+                  style={[
+                    styles.deleteButton,
+                    selectedIds.size === 0 && styles.deleteButtonDisabled,
+                  ]}
+                  disabled={selectedIds.size === 0 || isDeleting}
+                >
+                  <Ionicons
+                    name="trash-outline"
+                    size={18}
+                    color={selectedIds.size > 0 ? '#FFFFFF' : colors.mutedForeground}
+                  />
+                  <Text
+                    style={[
+                      styles.deleteButtonText,
+                      { color: selectedIds.size > 0 ? '#FFFFFF' : colors.mutedForeground },
+                    ]}
+                  >
+                    {isDeleting ? 'Eliminando...' : 'Eliminar'}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
           </View>
         </View>
 
@@ -221,7 +371,9 @@ export default function MetasScreen() {
                 item={meta}
                 onPress={handleMetaPress}
                 rankingIndex={index + 1}
-                isHighlighted={meta.id === metaBuscadaId}
+                isHighlighted={!isSelectionMode && meta.id === metaBuscadaId}
+                isSelectionMode={isSelectionMode}
+                isSelected={selectedIds.has(meta.id)}
               />
             ))
           ) : (
@@ -234,12 +386,14 @@ export default function MetasScreen() {
           )}
         </View>
 
-        <Pressable style={styles.createButton} onPress={handleCreateMeta}>
-          <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
-          <Text variant="link" style={styles.createButtonText}>
-            Crear nueva meta
-          </Text>
-        </Pressable>
+        {!isSelectionMode && (
+          <Pressable style={styles.createButton} onPress={handleCreateMeta}>
+            <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
+            <Text variant="link" style={styles.createButtonText}>
+              Crear nueva meta
+            </Text>
+          </Pressable>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -417,4 +571,50 @@ const createStyles = (colors: ThemeColors) =>
     createButtonText: {
       fontWeight: '600',
     },
+    sectionActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+    },
+    selectionBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.sm,
+      backgroundColor: colors.secondary,
+      borderRadius: radius.md,
+      marginBottom: spacing.sm,
+    },
+    selectionBarAction: {
+      padding: 4,
+    },
+    selectionBarTitle: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.foreground,
+      flex: 1,
+      textAlign: 'center',
+    },
+    selectionBarActionText: {
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    deleteButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: colors.destructive,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: radius.md,
+    },
+    deleteButtonDisabled: {
+      backgroundColor: colors.secondary,
+    },
+    deleteButtonText: {
+      fontSize: 14,
+      fontWeight: '600',
+    },
   });
+

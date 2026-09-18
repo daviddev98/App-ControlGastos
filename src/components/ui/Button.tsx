@@ -18,6 +18,7 @@ type Props = {
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
   children?: React.ReactNode;
+  accessibilityLabel?: string;
 };
 
 const textVariantMap: Record<ButtonVariant, 'default' | 'link' | 'muted'> = {
@@ -36,6 +37,7 @@ export function Button({
   disabled = false,
   style,
   children,
+  accessibilityLabel,
 }: Props) {
   const { colors } = useAppSettings();
   const variantStyles = useMemo(() => createVariantStyles(colors), [colors]);
@@ -45,6 +47,7 @@ export function Button({
     <Pressable
       onPress={onPress}
       disabled={disabled}
+      accessibilityLabel={accessibilityLabel}
       style={({ pressed }) =>
         cn(
           styles.base,

@@ -15,16 +15,18 @@ type Props = {
   onPress: (item: SavingsMeta) => void;
   rankingIndex?: number;
   isHighlighted?: boolean;
+  isSelectionMode?: boolean;
+  isSelected?: boolean;
 };
 
-export default function MetaListItem({ item, onPress, rankingIndex, isHighlighted }: Props) {
+export default function MetaListItem({ item, onPress, rankingIndex, isHighlighted, isSelectionMode, isSelected }: Props) {
   const { colors } = useAppSettings();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const progress = getMetaProgress(item);
 
   return (
     <Pressable onPress={() => onPress(item)}>
-      <Card style={[styles.card, isHighlighted && styles.cardHighlighted]}>
+      <Card style={[styles.card, isHighlighted && styles.cardHighlighted, isSelected && styles.cardSelected]}>
         <CardContent>
           <View style={styles.headerRow}>
             {rankingIndex !== undefined && (
@@ -40,7 +42,15 @@ export default function MetaListItem({ item, onPress, rankingIndex, isHighlighte
                 {item.descripcion}
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
+            {isSelectionMode ? (
+              <Ionicons
+                name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
+                size={22}
+                color={isSelected ? '#6366F1' : '#9CA3AF'}
+              />
+            ) : (
+              <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
+            )}
           </View>
 
           <View style={styles.badgesRow}>
@@ -184,6 +194,11 @@ const createStyles = (colors: ThemeColors) =>
       borderColor: colors.primary,
       borderWidth: 2,
       backgroundColor: `${colors.primary}12`,
+    },
+    cardSelected: {
+      borderColor: '#6366F1',
+      borderWidth: 2,
+      backgroundColor: '#6366F11A',
     },
     rankingBadge: {
       paddingHorizontal: 8,
