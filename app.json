@@ -28,7 +28,8 @@
         "backgroundColor": "#ffffff"
       },
       "permissions": [
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA"
       ],
       "intentFilters": [
         {
@@ -52,7 +53,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "La app necesita acceso a tus fotos para configurar tu perfil."
+          "photosPermission": "La app necesita acceso a tus fotos para adjuntar comprobantes y configurar tu perfil.",
+          "cameraPermission": "La app necesita la cámara para fotografiar facturas y comprobantes."
         }
       ],
       "expo-web-browser",

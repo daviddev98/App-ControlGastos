@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Image, Pressable, StyleSheet, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 import CategoryIcon from './CategoryIcon';
 import { useAppSettings } from '../hooks/useAppSettings';
@@ -59,9 +60,21 @@ export default function InstallmentCard({ item, onPress, colaLabel }: Props) {
         <View style={styles.divider} />
 
         <View style={styles.bottomRow}>
-          <Text variant="muted" style={styles.bankAccount}>
-            {item.bankAccount}
-          </Text>
+          <View style={styles.bankRow}>
+            <Text variant="muted" style={styles.bankAccount}>
+              {item.bankAccount}
+            </Text>
+            {item.receiptUri ? (
+              <View style={styles.receiptBadge}>
+                <Image
+                  source={{ uri: item.receiptUri }}
+                  style={styles.receiptThumb}
+                  resizeMode="cover"
+                />
+                <Ionicons name="document-attach-outline" size={12} color={colors.primary} />
+              </View>
+            ) : null}
+          </View>
           <Text variant="link" style={styles.detailsLink}>
             {onPress ? 'Editar' : 'Ver detalles'}
           </Text>
@@ -131,9 +144,27 @@ const createStyles = (colors: ThemeColors) =>
       alignItems: 'center',
       justifyContent: 'space-between',
     },
+    bankRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      flex: 1,
+      minWidth: 0,
+    },
     bankAccount: {
       fontSize: 12,
       fontWeight: '600',
+    },
+    receiptBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    receiptThumb: {
+      width: 22,
+      height: 22,
+      borderRadius: 4,
+      backgroundColor: colors.secondary,
     },
     detailsLink: {
       fontSize: 12,

@@ -16,8 +16,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { addMovimientoThunk, deleteMovimientoThunk, updateMovimientoThunk } from '../../store/slices/financeSlice';
 import { mostrarPanelHistorial } from '../../store/slices/uiSlice';
 import CustomButton from '../../components/CustomButton';
+import ReceiptPickerField from '../../components/ReceiptPickerField';
 import ScreenHeader from '../../components/ScreenHeader';
 import { Tabs, TabsList, TabsTrigger, Text } from '../../components/ui';
+import {
+  deleteReceiptLocally,
+  getReceiptUri,
+  saveReceiptLocally,
+} from '../../services/receiptStorage';
 import {
   BANK_ACCOUNTS,
   EXPENSE_CATEGORIES,
@@ -214,6 +220,7 @@ export default function RegistrarMovimientoScreen({ navigation, route }: Props) 
   const [date, setDate] = useState(formatToday());
   const [dueDate, setDueDate] = useState('');
   const [notes, setNotes] = useState('');
+  const [receiptUri, setReceiptUri] = useState<string | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
 
   useEffect(() => {
@@ -237,7 +244,19 @@ export default function RegistrarMovimientoScreen({ navigation, route }: Props) 
     );
     setDueDate(String(existingMovement.dueDate));
     setNotes(movementNotes);
+    setReceiptUri(existingMovement.receiptUri ?? null);
     setErrors({});
+
+    let cancelled = false;
+    void getReceiptUri(existingMovement.id).then((uri) => {
+      if (!cancelled && uri) {
+        setReceiptUri(uri);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [existingMovement]);
 
   const bankAccountOptions = useMemo(() => {
@@ -312,6 +331,8 @@ export default function RegistrarMovimientoScreen({ navigation, route }: Props) 
     };
 
     try {
+      let savedId = movimientoId;
+
       if (isEditing && movimientoId) {
         await dispatch(
           updateMovimientoThunk({
@@ -319,18 +340,35 @@ export default function RegistrarMovimientoScreen({ navigation, route }: Props) 
             ...payload,
           })
         ).unwrap();
-
-        Alert.alert('Cambios guardados', 'El movimiento se actualizó correctamente.', [
-          { text: 'OK', onPress: () => navigation.goBack() },
-        ]);
-        return;
+      } else {
+        const created = await dispatch(addMovimientoThunk(payload)).unwrap();
+        savedId = created.id;
       }
 
-      await dispatch(addMovimientoThunk(payload)).unwrap();
+      if (savedId) {
+        try {
+          if (transactionType === 'gasto' && receiptUri) {
+            await saveReceiptLocally(savedId, receiptUri);
+          } else if (!isEditing) {
+            await deleteReceiptLocally(savedId);
+          }
+        } catch {
+          Alert.alert(
+            isEditing ? 'Cambios guardados' : 'Registro guardado',
+            'El movimiento se guardó, pero no se pudo guardar el comprobante en el teléfono.',
+            [{ text: 'OK', onPress: () => navigation.goBack() }]
+          );
+          return;
+        }
+      }
 
-      Alert.alert('Registro guardado', 'El movimiento fue procesado con éxito.', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+      Alert.alert(
+        isEditing ? 'Cambios guardados' : 'Registro guardado',
+        isEditing
+          ? 'El movimiento se actualizó correctamente.'
+          : 'El movimiento fue procesado con éxito.',
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
     } catch (error) {
       Alert.alert(
         'Error',
@@ -461,6 +499,15 @@ export default function RegistrarMovimientoScreen({ navigation, route }: Props) 
                 keyboardType="numeric"
                 error={errors.dueDate}
                 colors={colors}
+              />
+            ) : null}
+
+            {transactionType === 'gasto' ? (
+              <ReceiptPickerField
+                uri={receiptUri}
+                onChange={setReceiptUri}
+                colors={colors}
+                allowRemove={!isEditing}
               />
             ) : null}
 

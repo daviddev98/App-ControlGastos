@@ -40,6 +40,7 @@ export type MovementItem = {
   dueDate: number;
   image?: ImageSourcePropType;
   date?: string;
+  receiptUri?: string;
 };
 
 export type GoalItem = {

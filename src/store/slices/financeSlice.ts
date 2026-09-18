@@ -1,6 +1,7 @@
 import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit';
 import { supabase } from '../../services/supabaseClient';
 import { getMonthDateRange } from '../../utils/date';
+import { attachReceiptsToMovements } from '../../services/receiptStorage';
 import { mapMovementFromDb, mapMovementToDb } from '../../utils/movimientos';
 import {
   construirSnapshotMovimientos,
@@ -501,7 +502,9 @@ export const fetchMovimientosByMonthThunk = createAsyncThunk(
 
       if (error) throw error;
 
-      const movimientos = (data ?? []).map((item) => mapMovementFromDb(item));
+      const movimientos = await attachReceiptsToMovements(
+        (data ?? []).map((item) => mapMovementFromDb(item))
+      );
 
       return { monthKey, movimientos };
     } catch (error: any) {
@@ -529,7 +532,9 @@ export const fetchMovimientosByAccountThunk = createAsyncThunk(
 
       if (error) throw error;
 
-      const movimientos = (data ?? []).map((item) => mapMovementFromDb(item));
+      const movimientos = await attachReceiptsToMovements(
+        (data ?? []).map((item) => mapMovementFromDb(item))
+      );
 
       return { accountId, movimientos };
     } catch (error: any) {
