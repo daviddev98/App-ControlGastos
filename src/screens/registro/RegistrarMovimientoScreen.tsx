@@ -13,7 +13,12 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { addMovimientoThunk, deleteMovimientoThunk, updateMovimientoThunk } from '../../store/slices/financeSlice';
+import {
+  addMovimientoThunk,
+  deleteMovimientoThunk,
+  fetchAccountsThunk,
+  updateMovimientoThunk,
+} from '../../store/slices/financeSlice';
 import { mostrarPanelHistorial } from '../../store/slices/uiSlice';
 import CustomButton from '../../components/CustomButton';
 import ReceiptPickerField from '../../components/ReceiptPickerField';
@@ -222,6 +227,10 @@ export default function RegistrarMovimientoScreen({ navigation, route }: Props) 
   const [notes, setNotes] = useState('');
   const [receiptUri, setReceiptUri] = useState<string | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
+
+  useEffect(() => {
+    dispatch(fetchAccountsThunk());
+  }, [dispatch]);
 
   useEffect(() => {
     if (!existingMovement) {

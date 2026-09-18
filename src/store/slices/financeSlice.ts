@@ -153,18 +153,82 @@ export const deleteAccountThunk = createAsyncThunk(
   }
 );
 
+export function calculateAccountBalanceDelta(
+  accountType: Account['type'],
+  amount: number
+): number {
+  if (accountType === 'credit_card') {
+    // For credit cards, balance is debt/used credit.
+    // An expense (amount < 0) increases used credit/debt.
+    // An income/payment (amount > 0) decreases used credit/debt.
+    return -amount;
+  }
+  // For bank and cash, balance is available funds.
+  // An expense (amount < 0) decreases available balance.
+  // An income (amount > 0) increases available balance.
+  return amount;
+}
+
+async function aplicarAjusteSaldoEnDb(
+  userId: string,
+  bankAccountName: string,
+  amountChange: number
+): Promise<Account | null> {
+  if (!bankAccountName || !bankAccountName.trim() || amountChange === 0) {
+    return null;
+  }
+
+  const trimmedName = bankAccountName.trim();
+
+  const { data: accounts, error: findError } = await supabase
+    .from('cuentas')
+    .select('*')
+    .eq('user_id', userId);
+
+  if (findError || !accounts || accounts.length === 0) {
+    return null;
+  }
+
+  const matchingRow = accounts.find(
+    (row) => String(row.name).trim().toLowerCase() === trimmedName.toLowerCase()
+  );
+
+  if (!matchingRow) {
+    return null;
+  }
+
+  const acc = mapAccountFromDb(matchingRow);
+  const delta = calculateAccountBalanceDelta(acc.type, amountChange);
+  const newBalance = Number((acc.balance + delta).toFixed(2));
+
+  const { data: updatedAccData, error: updateError } = await supabase
+    .from('cuentas')
+    .update({ balance: newBalance })
+    .eq('id', acc.id)
+    .eq('user_id', userId)
+    .select()
+    .single();
+
+  if (updateError || !updatedAccData) {
+    return null;
+  }
+
+  return mapAccountFromDb(updatedAccData);
+}
+
 export const addMovimientoThunk = createAsyncThunk(
   'finance/addMovimiento',
   async (movementData: CreateMovementPayload, { rejectWithValue }) => {
     try {
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError || !userData.user) throw new Error('Usuario no autenticado.');
+      const userId = userData.user.id;
 
       const { data, error } = await supabase
         .from('movimientos')
         .insert([
           {
-            user_id: userData.user.id,
+            user_id: userId,
             merchant: movementData.merchant,
             category: movementData.category,
             bank_account: movementData.bankAccount,
@@ -178,7 +242,18 @@ export const addMovimientoThunk = createAsyncThunk(
 
       if (error) throw error;
 
-      return mapMovementFromDb(data);
+      const createdMovement = mapMovementFromDb(data);
+
+      const updatedAccount = await aplicarAjusteSaldoEnDb(
+        userId,
+        movementData.bankAccount,
+        movementData.amount
+      );
+
+      return {
+        ...createdMovement,
+        _updatedAccounts: updatedAccount ? [updatedAccount] : [],
+      };
     } catch (error: any) {
       return rejectWithValue(error.message || 'Error al guardar el movimiento.');
     }
@@ -191,6 +266,18 @@ export const updateMovimientoThunk = createAsyncThunk(
     try {
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError || !userData.user) throw new Error('Usuario no autenticado.');
+      const userId = userData.user.id;
+
+      const { data: prevData } = await supabase
+        .from('movimientos')
+        .select('*')
+        .eq('id', movementData.id)
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      const prevMovement = prevData
+        ? mapMovementFromDb(prevData)
+        : movimientosLista.buscar(movementData.id);
 
       const { data, error } = await supabase
         .from('movimientos')
@@ -203,13 +290,50 @@ export const updateMovimientoThunk = createAsyncThunk(
           date: movementData.date,
         })
         .eq('id', movementData.id)
-        .eq('user_id', userData.user.id)
+        .eq('user_id', userId)
         .select()
         .single();
 
       if (error) throw error;
 
-      return mapMovementFromDb(data);
+      const updatedMovement = mapMovementFromDb(data);
+      const updatedAccounts: Account[] = [];
+
+      if (prevMovement) {
+        if (
+          prevMovement.bankAccount.trim().toLowerCase() ===
+          movementData.bankAccount.trim().toLowerCase()
+        ) {
+          const diffAmount = movementData.amount - prevMovement.amount;
+          if (diffAmount !== 0) {
+            const acc = await aplicarAjusteSaldoEnDb(
+              userId,
+              movementData.bankAccount,
+              diffAmount
+            );
+            if (acc) updatedAccounts.push(acc);
+          }
+        } else {
+          const oldAcc = await aplicarAjusteSaldoEnDb(
+            userId,
+            prevMovement.bankAccount,
+            -prevMovement.amount
+          );
+          if (oldAcc) updatedAccounts.push(oldAcc);
+
+          const newAcc = await aplicarAjusteSaldoEnDb(
+            userId,
+            movementData.bankAccount,
+            movementData.amount
+          );
+          if (newAcc) updatedAccounts.push(newAcc);
+        }
+      }
+
+      return {
+        ...updatedMovement,
+        _updatedAccounts: updatedAccounts,
+      };
     } catch (error: any) {
       return rejectWithValue(error.message || 'Error al actualizar el movimiento.');
     }
@@ -222,16 +346,41 @@ export const deleteMovimientoThunk = createAsyncThunk(
     try {
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError || !userData.user) throw new Error('Usuario no autenticado.');
+      const userId = userData.user.id;
+
+      const { data: prevData } = await supabase
+        .from('movimientos')
+        .select('*')
+        .eq('id', movimientoId)
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      const prevMovement = prevData
+        ? mapMovementFromDb(prevData)
+        : movimientosLista.buscar(movimientoId);
 
       const { error } = await supabase
         .from('movimientos')
         .delete()
         .eq('id', movimientoId)
-        .eq('user_id', userData.user.id);
+        .eq('user_id', userId);
 
       if (error) throw error;
 
-      return movimientoId;
+      const updatedAccounts: Account[] = [];
+      if (prevMovement) {
+        const acc = await aplicarAjusteSaldoEnDb(
+          userId,
+          prevMovement.bankAccount,
+          -prevMovement.amount
+        );
+        if (acc) updatedAccounts.push(acc);
+      }
+
+      return {
+        id: movimientoId,
+        _updatedAccounts: updatedAccounts,
+      };
     } catch (error: any) {
       return rejectWithValue(error.message || 'Error al eliminar el movimiento.');
     }
@@ -348,13 +497,64 @@ export const deshacerMovimientoThunk = createAsyncThunk(
   'finance/deshacerMovimiento',
   async (_, { rejectWithValue }) => {
     try {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData.user) throw new Error('Usuario no autenticado.');
+      const userId = userData.user.id;
+
       const accion = historialMovimientos.cimaDeshacer();
       if (!accion) {
         throw new Error('No hay acciones para deshacer.');
       }
 
       await revertirAccionEnSupabase(accion);
-      return accion;
+
+      const updatedAccounts: Account[] = [];
+      if (accion.tipo === 'crear') {
+        const acc = await aplicarAjusteSaldoEnDb(
+          userId,
+          accion.movimiento.bankAccount,
+          -accion.movimiento.amount
+        );
+        if (acc) updatedAccounts.push(acc);
+      } else if (accion.tipo === 'editar') {
+        if (
+          accion.anterior.bankAccount.trim().toLowerCase() ===
+          accion.actual.bankAccount.trim().toLowerCase()
+        ) {
+          const diff = accion.anterior.amount - accion.actual.amount;
+          const acc = await aplicarAjusteSaldoEnDb(
+            userId,
+            accion.anterior.bankAccount,
+            diff
+          );
+          if (acc) updatedAccounts.push(acc);
+        } else {
+          const accActual = await aplicarAjusteSaldoEnDb(
+            userId,
+            accion.actual.bankAccount,
+            -accion.actual.amount
+          );
+          if (accActual) updatedAccounts.push(accActual);
+          const accAnterior = await aplicarAjusteSaldoEnDb(
+            userId,
+            accion.anterior.bankAccount,
+            accion.anterior.amount
+          );
+          if (accAnterior) updatedAccounts.push(accAnterior);
+        }
+      } else if (accion.tipo === 'eliminar') {
+        const acc = await aplicarAjusteSaldoEnDb(
+          userId,
+          accion.movimiento.bankAccount,
+          accion.movimiento.amount
+        );
+        if (acc) updatedAccounts.push(acc);
+      }
+
+      return {
+        accion,
+        _updatedAccounts: updatedAccounts,
+      };
     } catch (error: any) {
       return rejectWithValue(error.message || 'Error al deshacer la acción.');
     }
@@ -365,13 +565,64 @@ export const rehacerMovimientoThunk = createAsyncThunk(
   'finance/rehacerMovimiento',
   async (_, { rejectWithValue }) => {
     try {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData.user) throw new Error('Usuario no autenticado.');
+      const userId = userData.user.id;
+
       const accion = historialMovimientos.cimaRehacer();
       if (!accion) {
         throw new Error('No hay acciones para rehacer.');
       }
 
       await reaplicarAccionEnSupabase(accion);
-      return accion;
+
+      const updatedAccounts: Account[] = [];
+      if (accion.tipo === 'crear') {
+        const acc = await aplicarAjusteSaldoEnDb(
+          userId,
+          accion.movimiento.bankAccount,
+          accion.movimiento.amount
+        );
+        if (acc) updatedAccounts.push(acc);
+      } else if (accion.tipo === 'editar') {
+        if (
+          accion.anterior.bankAccount.trim().toLowerCase() ===
+          accion.actual.bankAccount.trim().toLowerCase()
+        ) {
+          const diff = accion.actual.amount - accion.anterior.amount;
+          const acc = await aplicarAjusteSaldoEnDb(
+            userId,
+            accion.actual.bankAccount,
+            diff
+          );
+          if (acc) updatedAccounts.push(acc);
+        } else {
+          const accAnterior = await aplicarAjusteSaldoEnDb(
+            userId,
+            accion.anterior.bankAccount,
+            -accion.anterior.amount
+          );
+          if (accAnterior) updatedAccounts.push(accAnterior);
+          const accActual = await aplicarAjusteSaldoEnDb(
+            userId,
+            accion.actual.bankAccount,
+            accion.actual.amount
+          );
+          if (accActual) updatedAccounts.push(accActual);
+        }
+      } else if (accion.tipo === 'eliminar') {
+        const acc = await aplicarAjusteSaldoEnDb(
+          userId,
+          accion.movimiento.bankAccount,
+          -accion.movimiento.amount
+        );
+        if (acc) updatedAccounts.push(acc);
+      }
+
+      return {
+        accion,
+        _updatedAccounts: updatedAccounts,
+      };
     } catch (error: any) {
       return rejectWithValue(error.message || 'Error al rehacer la acción.');
     }
@@ -639,6 +890,19 @@ const financeSlice = createSlice({
   reducers: {
     addMovimiento: (state, action: PayloadAction<MovementItem>) => {
       movimientosLista.insertar(action.payload);
+      const accounts = cuentasIndice.valores();
+      const matchingAccount = accounts.find(
+        (acc) => acc.name.trim().toLowerCase() === action.payload.bankAccount.trim().toLowerCase()
+      );
+      if (matchingAccount) {
+        const delta = calculateAccountBalanceDelta(matchingAccount.type, action.payload.amount);
+        const updatedAcc: Account = {
+          ...matchingAccount,
+          balance: Number((matchingAccount.balance + delta).toFixed(2)),
+        };
+        cuentasIndice.establecer(updatedAcc);
+        sincronizarCuentasEnEstado(state);
+      }
       sincronizarMovimientosEnEstado(state);
     },
     addAccount: (state, action: PayloadAction<Account>) => {
@@ -723,37 +987,72 @@ const financeSlice = createSlice({
         sincronizarHistorialEnEstado(state);
       })
       .addCase(addMovimientoThunk.fulfilled, (state, action) => {
-        historialMovimientos.registrarCrear(action.payload);
-        movimientosLista.insertar(action.payload);
+        const { _updatedAccounts, ...movement } = action.payload;
+        historialMovimientos.registrarCrear(movement as MovementItem);
+        movimientosLista.insertar(movement as MovementItem);
+        if (_updatedAccounts && _updatedAccounts.length > 0) {
+          for (const acc of _updatedAccounts) {
+            cuentasIndice.establecer(acc);
+          }
+          sincronizarCuentasEnEstado(state);
+        }
         sincronizarMovimientosEnEstado(state);
         sincronizarHistorialEnEstado(state);
       })
       .addCase(updateMovimientoThunk.fulfilled, (state, action) => {
-        const anterior = movimientosLista.buscar(action.payload.id);
+        const { _updatedAccounts, ...movement } = action.payload;
+        const anterior = movimientosLista.buscar(movement.id);
         if (anterior) {
-          historialMovimientos.registrarEditar(anterior, action.payload);
+          historialMovimientos.registrarEditar(anterior, movement as MovementItem);
         }
-        movimientosLista.insertar(action.payload);
+        movimientosLista.insertar(movement as MovementItem);
+        if (_updatedAccounts && _updatedAccounts.length > 0) {
+          for (const acc of _updatedAccounts) {
+            cuentasIndice.establecer(acc);
+          }
+          sincronizarCuentasEnEstado(state);
+        }
         sincronizarMovimientosEnEstado(state);
         sincronizarHistorialEnEstado(state);
       })
       .addCase(deleteMovimientoThunk.fulfilled, (state, action) => {
-        const eliminado = movimientosLista.eliminar(action.payload);
+        const { id: movimientoId, _updatedAccounts } = action.payload;
+        const eliminado = movimientosLista.eliminar(movimientoId);
         if (eliminado) {
           historialMovimientos.registrarEliminar(eliminado);
+        }
+        if (_updatedAccounts && _updatedAccounts.length > 0) {
+          for (const acc of _updatedAccounts) {
+            cuentasIndice.establecer(acc);
+          }
+          sincronizarCuentasEnEstado(state);
         }
         sincronizarMovimientosEnEstado(state);
         sincronizarHistorialEnEstado(state);
       })
       .addCase(deshacerMovimientoThunk.fulfilled, (state, action) => {
+        const { accion, _updatedAccounts } = action.payload;
         historialMovimientos.confirmarDeshacer();
-        aplicarInversaEnLista(action.payload);
+        aplicarInversaEnLista(accion);
+        if (_updatedAccounts && _updatedAccounts.length > 0) {
+          for (const acc of _updatedAccounts) {
+            cuentasIndice.establecer(acc);
+          }
+          sincronizarCuentasEnEstado(state);
+        }
         sincronizarMovimientosEnEstado(state);
         sincronizarHistorialEnEstado(state);
       })
       .addCase(rehacerMovimientoThunk.fulfilled, (state, action) => {
+        const { accion, _updatedAccounts } = action.payload;
         historialMovimientos.confirmarRehacer();
-        aplicarDirectaEnLista(action.payload);
+        aplicarDirectaEnLista(accion);
+        if (_updatedAccounts && _updatedAccounts.length > 0) {
+          for (const acc of _updatedAccounts) {
+            cuentasIndice.establecer(acc);
+          }
+          sincronizarCuentasEnEstado(state);
+        }
         sincronizarMovimientosEnEstado(state);
         sincronizarHistorialEnEstado(state);
       })

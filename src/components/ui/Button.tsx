@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Pressable, StyleSheet, ViewStyle } from 'react-native';
+import { Pressable, StyleProp, StyleSheet, ViewStyle } from 'react-native';
 
 import { useAppSettings } from '../../hooks/useAppSettings';
 import { ThemeColors } from '../../constants/themes';
@@ -16,7 +16,7 @@ type Props = {
   variant?: ButtonVariant;
   size?: ButtonSize;
   disabled?: boolean;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   children?: React.ReactNode;
 };
 
