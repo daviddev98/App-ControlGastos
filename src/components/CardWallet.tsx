@@ -26,7 +26,8 @@ export default function CardWallet({ wallet }: Props) {
   const styles = useMemo(() => createStyles(), []);
   const [showBalance, setShowBalance] = useState(true);
 
-  const displayBalance = showBalance ? formatLPS(wallet.usedBalance) : '••••••';
+  const signedBalance = wallet.isDebt ? -Math.abs(wallet.usedBalance) : wallet.usedBalance;
+  const displayBalance = showBalance ? formatLPS(signedBalance) : '••••••';
 
   return (
     <View style={styles.wallet}>
@@ -44,7 +45,9 @@ export default function CardWallet({ wallet }: Props) {
               {wallet.balanceLabel ?? 'Saldo utilizado'}
             </Text>
             <View style={styles.balanceRow}>
-              <Text style={styles.balance}>{displayBalance}</Text>
+              <Text style={[styles.balance, wallet.isDebt && styles.debtBalance]}>
+                {displayBalance}
+              </Text>
               <Pressable
                 onPress={() => setShowBalance((prev) => !prev)}
                 hitSlop={8}
@@ -105,5 +108,8 @@ const createStyles = () =>
       fontSize: 22,
       fontWeight: '700',
       letterSpacing: -0.5,
+    },
+    debtBalance: {
+      color: '#DC2626',
     },
   });

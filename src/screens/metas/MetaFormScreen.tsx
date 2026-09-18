@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -9,6 +10,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import DateTimePicker, { DateTimePickerChangeEvent } from '@react-native-community/datetimepicker';
+import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -31,6 +34,7 @@ import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { selectSavingsMetaById } from '../../store/selectors/financeSelectors';
 import { addSavingsMetaThunk, updateSavingsMetaThunk } from '../../store/slices/financeSlice';
 import { RootStackParamList } from '../../types/navigation';
+import { parseDDMMYYYYtoYYYYMMDD, parseYYYYMMDDToDDMMYYYY } from '../../utils/date';
 import { getMetaProgress } from '../../utils/metas';
 import { isRequired, isValidAmount, isValidDate } from '../../utils/validation';
 
@@ -52,12 +56,138 @@ type FormErrors = Partial<
   >
 >;
 
-function parseDDMMYYYYtoYYYYMMDD(dateStr: string): string {
-  const parts = dateStr.split('/');
-  if (parts.length === 3) {
-    return `${parts[2]}-${parts[1]}-${parts[0]}`;
+function toDisplayDate(value: string): string {
+  if (!value) {
+    return '';
   }
-  return dateStr;
+  if (value.includes('/')) {
+    return value;
+  }
+  return parseYYYYMMDDToDDMMYYYY(value);
+}
+
+function parseFormDate(value: string): Date {
+  const display = toDisplayDate(value);
+  const iso = parseDDMMYYYYtoYYYYMMDD(display);
+  const match = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return new Date();
+  }
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
+
+function formatDate(date: Date): string {
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  return `${day}/${month}/${date.getFullYear()}`;
+}
+
+type DatePickerFieldProps = {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  error?: string;
+  minimumDate?: Date;
+  colors: ThemeColors;
+};
+
+function DatePickerField({
+  label,
+  value,
+  onChange,
+  error,
+  minimumDate,
+  colors,
+}: DatePickerFieldProps) {
+  const styles = useMemo(() => createFieldStyles(colors), [colors]);
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(() => parseFormDate(value));
+
+  const openPicker = () => {
+    setDraft(parseFormDate(value));
+    setOpen(true);
+  };
+
+  const applyDate = (date: Date) => {
+    onChange(formatDate(date));
+  };
+
+  const handleValueChange = (_event: DateTimePickerChangeEvent, selectedDate: Date) => {
+    if (Platform.OS === 'android') {
+      setOpen(false);
+      applyDate(selectedDate);
+      return;
+    }
+
+    setDraft(selectedDate);
+  };
+
+  const handleDismiss = () => {
+    setOpen(false);
+  };
+
+  return (
+    <View style={styles.wrapper}>
+      <Text variant="label" style={styles.label}>
+        {label}
+      </Text>
+      <Pressable
+        onPress={openPicker}
+        style={[styles.input, styles.dateTrigger, error && styles.inputError]}
+      >
+        <Text style={[styles.dateValue, !value && styles.datePlaceholder]}>
+          {toDisplayDate(value) || 'Selecciona una fecha'}
+        </Text>
+        <Ionicons name="calendar-outline" size={18} color={colors.mutedForeground} />
+      </Pressable>
+      {error ? (
+        <Text variant="destructive" style={styles.error}>
+          {error}
+        </Text>
+      ) : null}
+
+      {open && Platform.OS === 'android' ? (
+        <DateTimePicker
+          value={draft}
+          mode="date"
+          display="calendar"
+          minimumDate={minimumDate}
+          onValueChange={handleValueChange}
+          onDismiss={handleDismiss}
+        />
+      ) : null}
+
+      {Platform.OS === 'ios' ? (
+        <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+          <View style={styles.dateOverlay}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(false)} />
+            <View style={styles.dateSheet}>
+              <Text variant="subtitle" style={styles.dateSheetTitle}>
+                {label}
+              </Text>
+              <DateTimePicker
+                value={draft}
+                mode="date"
+                display="spinner"
+                minimumDate={minimumDate}
+                onValueChange={handleValueChange}
+                style={styles.iosPicker}
+              />
+              <Pressable
+                style={styles.dateConfirm}
+                onPress={() => {
+                  applyDate(draft);
+                  setOpen(false);
+                }}
+              >
+                <Text style={styles.dateConfirmText}>Listo</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+      ) : null}
+    </View>
+  );
 }
 
 type FormFieldProps = {
@@ -178,8 +308,8 @@ export default function MetaFormScreen({ navigation, route }: Props) {
   const [montoActual, setMontoActual] = useState(
     existingMeta ? String(existingMeta.montoActual) : ''
   );
-  const [fechaInicio, setFechaInicio] = useState(existingMeta?.fechaInicio ?? '');
-  const [fechaLimite, setFechaLimite] = useState(existingMeta?.fechaLimite ?? '');
+  const [fechaInicio, setFechaInicio] = useState(toDisplayDate(existingMeta?.fechaInicio ?? ''));
+  const [fechaLimite, setFechaLimite] = useState(toDisplayDate(existingMeta?.fechaLimite ?? ''));
   const [prioridad, setPrioridad] = useState<MetaPriority>(existingMeta?.prioridad ?? 'media');
   const [estado, setEstado] = useState<MetaStatus>(existingMeta?.estado ?? 'activa');
   const [notes, setNotes] = useState(existingMeta?.notas ?? '');
@@ -219,13 +349,18 @@ export default function MetaFormScreen({ navigation, route }: Props) {
     if (!isRequired(fechaInicio)) {
       nextErrors.fechaInicio = 'La fecha de inicio es obligatoria.';
     } else if (!isValidDate(fechaInicio)) {
-      nextErrors.fechaInicio = 'Usa el formato DD/MM/AAAA.';
+      nextErrors.fechaInicio = 'Selecciona una fecha válida.';
     }
 
     if (!isRequired(fechaLimite)) {
       nextErrors.fechaLimite = 'La fecha límite es obligatoria.';
     } else if (!isValidDate(fechaLimite)) {
-      nextErrors.fechaLimite = 'Usa el formato DD/MM/AAAA.';
+      nextErrors.fechaLimite = 'Selecciona una fecha válida.';
+    } else if (
+      isValidDate(fechaInicio) &&
+      parseFormDate(fechaLimite).getTime() < parseFormDate(fechaInicio).getTime()
+    ) {
+      nextErrors.fechaLimite = 'La fecha límite no puede ser anterior al inicio.';
     }
 
     setErrors(nextErrors);
@@ -378,21 +513,20 @@ export default function MetaFormScreen({ navigation, route }: Props) {
               colors={colors}
             />
 
-            <FormField
+            <DatePickerField
               label="Fecha de inicio"
               value={fechaInicio}
               onChange={setFechaInicio}
-              placeholder="DD/MM/AAAA"
               error={errors.fechaInicio}
               colors={colors}
             />
 
-            <FormField
+            <DatePickerField
               label="Fecha límite"
               value={fechaLimite}
               onChange={setFechaLimite}
-              placeholder="DD/MM/AAAA"
               error={errors.fechaLimite}
+              minimumDate={fechaInicio ? parseFormDate(fechaInicio) : undefined}
               colors={colors}
             />
 
@@ -462,6 +596,53 @@ const createFieldStyles = (colors: ThemeColors) =>
     },
     error: {
       fontSize: 12,
+    },
+    dateTrigger: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
+    },
+    dateValue: {
+      flex: 1,
+      fontSize: 14,
+      color: colors.foreground,
+    },
+    datePlaceholder: {
+      color: colors.muted,
+    },
+    dateOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(15, 23, 42, 0.45)',
+      justifyContent: 'flex-end',
+    },
+    dateSheet: {
+      backgroundColor: colors.card,
+      borderTopLeftRadius: radius.lg,
+      borderTopRightRadius: radius.lg,
+      paddingHorizontal: spacing.md,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.xl,
+    },
+    dateSheetTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      textAlign: 'center',
+      marginBottom: spacing.sm,
+    },
+    iosPicker: {
+      height: 180,
+    },
+    dateConfirm: {
+      marginTop: spacing.sm,
+      backgroundColor: colors.foreground,
+      borderRadius: radius.md,
+      paddingVertical: 12,
+      alignItems: 'center',
+    },
+    dateConfirmText: {
+      color: colors.primaryForeground,
+      fontWeight: '700',
     },
     chipRow: {
       flexDirection: 'row',

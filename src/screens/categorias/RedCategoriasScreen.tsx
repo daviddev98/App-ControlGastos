@@ -12,16 +12,16 @@ import { CATEGORIAS_GRAFO, redCategorias } from '../../structures/redCategorias'
 import { RootStackParamList } from '../../types/navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RedCategorias'>;
-type TipoRecorrido = 'BFS' | 'DFS';
+type TipoRecorrido = 'cercanas' | 'enCadena';
 
 export default function RedCategoriasScreen({ navigation }: Props) {
   const { colors } = useAppSettings();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [origen, setOrigen] = useState<string>(CATEGORIAS_GRAFO[0]);
-  const [tipoRecorrido, setTipoRecorrido] = useState<TipoRecorrido>('BFS');
+  const [tipoRecorrido, setTipoRecorrido] = useState<TipoRecorrido>('cercanas');
   const [recorrido, setRecorrido] = useState<string[]>([]);
 
-  const vecinos = useMemo(() => redCategorias.vecinos(origen), [origen]);
+  const relacionadas = useMemo(() => redCategorias.vecinos(origen), [origen]);
 
   useEffect(() => {
     redCategorias.reconstruir();
@@ -29,7 +29,7 @@ export default function RedCategoriasScreen({ navigation }: Props) {
 
   const handleRecorrer = (tipo: TipoRecorrido) => {
     setTipoRecorrido(tipo);
-    const orden = tipo === 'BFS' ? redCategorias.bfs(origen) : redCategorias.dfs(origen);
+    const orden = tipo === 'cercanas' ? redCategorias.bfs(origen) : redCategorias.dfs(origen);
     setRecorrido(orden);
   };
 
@@ -43,8 +43,8 @@ export default function RedCategoriasScreen({ navigation }: Props) {
         <ScreenHeader title="Red de categorías" onBackPress={() => navigation.goBack()} />
 
         <Text variant="muted" style={styles.intro}>
-          Grafo no dirigido con lista de adyacencia. Cada categoría es un vértice; las aristas
-          unen gastos e ingresos relacionados. BFS recorre por niveles y DFS profundiza primero.
+          Elige una categoría para ver cuáles se relacionan con ella y cómo se conectan con el
+          resto.
         </Text>
 
         <Text variant="label" style={styles.label}>
@@ -73,22 +73,23 @@ export default function RedCategoriasScreen({ navigation }: Props) {
         </View>
 
         <Text variant="muted" style={styles.neighbors}>
-          Vecinos: {vecinos.length > 0 ? vecinos.join(', ') : 'ninguno'}
+          Relacionadas:{' '}
+          {relacionadas.length > 0 ? relacionadas.join(', ') : 'ninguna'}
         </Text>
 
         <View style={styles.actions}>
           <Button
-            title="Recorrer BFS"
-            variant={tipoRecorrido === 'BFS' && recorrido.length > 0 ? 'default' : 'outline'}
+            title="Cercanas primero"
+            variant={tipoRecorrido === 'cercanas' && recorrido.length > 0 ? 'default' : 'outline'}
             size="sm"
-            onPress={() => handleRecorrer('BFS')}
+            onPress={() => handleRecorrer('cercanas')}
             style={styles.actionButton}
           />
           <Button
-            title="Recorrer DFS"
-            variant={tipoRecorrido === 'DFS' && recorrido.length > 0 ? 'default' : 'outline'}
+            title="En cadena"
+            variant={tipoRecorrido === 'enCadena' && recorrido.length > 0 ? 'default' : 'outline'}
             size="sm"
-            onPress={() => handleRecorrer('DFS')}
+            onPress={() => handleRecorrer('enCadena')}
             style={styles.actionButton}
           />
         </View>
@@ -96,7 +97,7 @@ export default function RedCategoriasScreen({ navigation }: Props) {
         {recorrido.length > 0 ? (
           <View style={styles.resultCard}>
             <Text variant="label" style={styles.resultTitle}>
-              Orden {tipoRecorrido} desde {origen}
+              Desde {origen}
             </Text>
             {recorrido.map((categoria, indice) => (
               <View key={`${tipoRecorrido}-${categoria}`} style={styles.resultRow}>
@@ -107,7 +108,7 @@ export default function RedCategoriasScreen({ navigation }: Props) {
           </View>
         ) : (
           <Text variant="muted" style={styles.empty}>
-            Elige un origen y ejecuta BFS o DFS para ver el orden de visita.
+            Elige una categoría y pulsa una opción para ver el orden.
           </Text>
         )}
       </ScrollView>

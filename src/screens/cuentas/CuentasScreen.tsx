@@ -14,11 +14,7 @@ import { spacing } from '../../constants/theme';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import { ThemeColors } from '../../constants/themes';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import {
-  selectAccounts,
-  selectAccountsNetBalance,
-  selectHashCuentasResumen,
-} from '../../store/selectors/financeSelectors';
+import { selectAccounts, selectAccountsNetBalance } from '../../store/selectors/financeSelectors';
 import { fetchAccountsThunk } from '../../store/slices/financeSlice';
 import { formatLPS } from '../../utils/currency';
 import { RootStackParamList } from '../../types/navigation';
@@ -31,7 +27,6 @@ export default function CuentasScreen() {
 
   const accounts = useAppSelector(selectAccounts);
   const totalBalance = useAppSelector(selectAccountsNetBalance);
-  const hashResumen = useAppSelector(selectHashCuentasResumen);
 
   const loadAccounts = useCallback(() => {
     dispatch(fetchAccountsThunk());
@@ -69,17 +64,6 @@ export default function CuentasScreen() {
         />
 
         <AccountsDonutChart accounts={accounts} totalBalance={totalBalance} />
-
-        <View style={styles.hashCard}>
-          <Text variant="label" style={styles.hashTitle}>
-            Índice hash de cuentas
-          </Text>
-          <Text variant="muted" style={styles.hashText}>
-            {hashResumen.cubetas} cubetas · {hashResumen.tamaño} claves ·{' '}
-            {hashResumen.colisiones} cubeta{hashResumen.colisiones === 1 ? '' : 's'} con
-            colisión (encadenamiento)
-          </Text>
-        </View>
 
         <View style={styles.sectionHeader}>
           <View style={styles.sectionTitleRow}>
@@ -175,22 +159,5 @@ const createStyles = (colors: ThemeColors) =>
     },
     createButtonText: {
       fontWeight: '600',
-    },
-    hashCard: {
-      backgroundColor: colors.card,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: colors.border,
-      padding: spacing.md,
-      marginBottom: spacing.md,
-      gap: 4,
-    },
-    hashTitle: {
-      fontWeight: '700',
-      fontSize: 12,
-    },
-    hashText: {
-      fontSize: 12,
-      lineHeight: 18,
     },
   });

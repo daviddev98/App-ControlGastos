@@ -4,3 +4,6 @@ export const selectInicioActiveTab = (state: RootState) => state.ui.inicioActive
 
 export const selectInicioSelectedMonthKey = (state: RootState) =>
   state.ui.inicioSelectedMonthKey;
+
+export const selectHistorialPanelToken = (state: RootState) =>
+  state.ui.historialPanelToken;

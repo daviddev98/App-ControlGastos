@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -9,9 +10,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { addMovimientoThunk, deleteMovimientoThunk, updateMovimientoThunk } from '../../store/slices/financeSlice';
+import { mostrarPanelHistorial } from '../../store/slices/uiSlice';
 import CustomButton from '../../components/CustomButton';
 import ScreenHeader from '../../components/ScreenHeader';
 import { Tabs, TabsList, TabsTrigger, Text } from '../../components/ui';
@@ -99,8 +102,9 @@ function FormField({
   );
 }
 
-type ChipSelectorProps = {
+type ComboBoxProps = {
   label: string;
+  placeholder?: string;
   options: readonly string[];
   value: string;
   onChange: (value: string) => void;
@@ -108,38 +112,84 @@ type ChipSelectorProps = {
   colors: ThemeColors;
 };
 
-function ChipSelector({ label, options, value, onChange, error, colors }: ChipSelectorProps) {
+function ComboBox({
+  label,
+  placeholder = 'Selecciona una opción',
+  options,
+  value,
+  onChange,
+  error,
+  colors,
+}: ComboBoxProps) {
   const styles = useMemo(() => createFieldStyles(colors), [colors]);
+  const [open, setOpen] = useState(false);
 
   return (
     <View style={styles.wrapper}>
       <Text variant="label" style={styles.label}>
         {label}
       </Text>
-      <View style={styles.chipRow}>
-        {options.map((option) => {
-          const isSelected = value === option;
-          return (
-            <Pressable
-              key={option}
-              onPress={() => onChange(option)}
-              style={[styles.chip, isSelected && styles.chipSelected]}
-            >
-              <Text
-                variant="default"
-                style={[styles.chipText, isSelected && styles.chipTextSelected]}
-              >
-                {option}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      <Pressable
+        onPress={() => setOpen(true)}
+        style={[styles.comboTrigger, error && styles.inputError]}
+      >
+        <Text
+          style={[styles.comboValue, !value && styles.comboPlaceholder]}
+          numberOfLines={1}
+        >
+          {value || placeholder}
+        </Text>
+        <Ionicons name="chevron-down" size={18} color={colors.mutedForeground} />
+      </Pressable>
       {error ? (
         <Text variant="destructive" style={styles.error}>
           {error}
         </Text>
       ) : null}
+
+      <Modal
+        visible={open}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOpen(false)}
+      >
+        <View style={styles.comboOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(false)} />
+          <View style={styles.comboSheet}>
+            <Text variant="subtitle" style={styles.comboSheetTitle}>
+              {label}
+            </Text>
+            <ScrollView
+              style={styles.comboList}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              {options.map((option) => {
+                const selected = option === value;
+                return (
+                  <Pressable
+                    key={option}
+                    onPress={() => {
+                      onChange(option);
+                      setOpen(false);
+                    }}
+                    style={[styles.comboOption, selected && styles.comboOptionSelected]}
+                  >
+                    <Text
+                      style={[styles.comboOptionText, selected && styles.comboOptionTextSelected]}
+                    >
+                      {option}
+                    </Text>
+                    {selected ? (
+                      <Ionicons name="checkmark" size={18} color={colors.primary} />
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -191,12 +241,16 @@ export default function RegistrarMovimientoScreen({ navigation, route }: Props) 
   }, [existingMovement]);
 
   const bankAccountOptions = useMemo(() => {
-    const accountNames = accounts.map((account) => account.name);
-    return [...new Set([...accountNames, ...BANK_ACCOUNTS, bankAccount].filter(Boolean))];
+    const accountNames = [...new Set(accounts.map((account) => account.name).filter(Boolean))];
+    const baseOptions = accountNames.length > 0 ? accountNames : [...BANK_ACCOUNTS];
+    return [...new Set([...baseOptions, bankAccount].filter(Boolean))];
   }, [accounts, bankAccount]);
 
-  const categories =
-    transactionType === 'gasto' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
+  const categories = useMemo(() => {
+    const base =
+      transactionType === 'gasto' ? [...EXPENSE_CATEGORIES] : [...INCOME_CATEGORIES];
+    return [...new Set([...base, category].filter(Boolean))];
+  }, [transactionType, category]);
 
   const handleTypeChange = (type: string) => {
     setTransactionType(type as TransactionType);
@@ -213,11 +267,8 @@ export default function RegistrarMovimientoScreen({ navigation, route }: Props) 
       nextErrors.amount = 'Ingresa un monto válido mayor a 0.';
     }
 
-    if (!isRequired(merchant)) {
-      nextErrors.merchant =
-        transactionType === 'gasto'
-          ? 'El comercio es obligatorio.'
-          : 'La descripción es obligatoria.';
+    if (transactionType === 'ingreso' && !isRequired(merchant)) {
+      nextErrors.merchant = 'La descripción es obligatoria.';
     }
 
     if (!isRequired(category)) {
@@ -250,7 +301,9 @@ export default function RegistrarMovimientoScreen({ navigation, route }: Props) 
     const dueDay = dueDate.trim() ? Number.parseInt(dueDate, 10) : new Date().getDate();
     const formattedDbDate = parseDDMMYYYYtoYYYYMMDD(date);
     const payload = {
-      merchant: merchant.trim(),
+      merchant:
+        merchant.trim() ||
+        (transactionType === 'gasto' ? category : merchant.trim()),
       category: buildCategoryWithNotes(category, notes),
       bankAccount,
       amount: signedAmount,
@@ -293,7 +346,7 @@ export default function RegistrarMovimientoScreen({ navigation, route }: Props) 
 
     Alert.alert(
       'Eliminar movimiento',
-      'El movimiento se eliminará de forma permanente. ¿Deseas continuar?',
+      'El movimiento se quitará de tus registros. ¿Deseas continuar?',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -302,9 +355,8 @@ export default function RegistrarMovimientoScreen({ navigation, route }: Props) 
           onPress: async () => {
             try {
               await dispatch(deleteMovimientoThunk(movimientoId)).unwrap();
-              Alert.alert('Movimiento eliminado', 'El registro se eliminó correctamente.', [
-                { text: 'OK', onPress: () => navigation.goBack() },
-              ]);
+              dispatch(mostrarPanelHistorial());
+              navigation.goBack();
             } catch {
               Alert.alert('Error', 'No se pudo eliminar el movimiento.');
             }
@@ -360,7 +412,7 @@ export default function RegistrarMovimientoScreen({ navigation, route }: Props) 
             />
 
             <FormField
-              label={transactionType === 'gasto' ? 'Comercio' : 'Descripción'}
+              label={transactionType === 'gasto' ? 'Comercio (opcional)' : 'Descripción'}
               value={merchant}
               onChange={setMerchant}
               placeholder={
@@ -370,8 +422,9 @@ export default function RegistrarMovimientoScreen({ navigation, route }: Props) 
               colors={colors}
             />
 
-            <ChipSelector
+            <ComboBox
               label="Categoría"
+              placeholder="Selecciona una categoría"
               options={categories}
               value={category}
               onChange={setCategory}
@@ -379,8 +432,9 @@ export default function RegistrarMovimientoScreen({ navigation, route }: Props) 
               colors={colors}
             />
 
-            <ChipSelector
+            <ComboBox
               label="Cuenta bancaria"
+              placeholder="Selecciona una cuenta"
               options={bankAccountOptions}
               value={bankAccount}
               onChange={setBankAccount}
@@ -469,29 +523,66 @@ const createFieldStyles = (colors: ThemeColors) =>
     error: {
       fontSize: 12,
     },
-    chipRow: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: spacing.sm,
-    },
-    chip: {
-      paddingHorizontal: 14,
-      paddingVertical: 8,
-      borderRadius: radius.full,
-      backgroundColor: colors.secondary,
+    comboTrigger: {
+      backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: colors.border,
+      borderRadius: radius.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
     },
-    chipSelected: {
-      backgroundColor: '#38BDF8',
-      borderColor: '#38BDF8',
+    comboValue: {
+      flex: 1,
+      fontSize: 14,
+      color: colors.foreground,
     },
-    chipText: {
-      fontSize: 12,
-      fontWeight: '500',
+    comboPlaceholder: {
+      color: colors.muted,
     },
-    chipTextSelected: {
-      color: '#000000',
+    comboOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(15, 23, 42, 0.45)',
+      justifyContent: 'center',
+      paddingHorizontal: spacing.lg,
+    },
+    comboSheet: {
+      backgroundColor: colors.card,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      maxHeight: '70%',
+      paddingVertical: spacing.md,
+    },
+    comboSheetTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      paddingHorizontal: spacing.md,
+      marginBottom: spacing.sm,
+    },
+    comboList: {
+      maxHeight: 360,
+    },
+    comboOption: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
+    },
+    comboOptionSelected: {
+      backgroundColor: colors.secondary,
+    },
+    comboOptionText: {
+      flex: 1,
+      fontSize: 14,
+      color: colors.foreground,
+    },
+    comboOptionTextSelected: {
       fontWeight: '700',
     },
   });

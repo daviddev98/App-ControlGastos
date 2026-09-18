@@ -18,7 +18,7 @@ function AccountIcon({ account }: { account: Account }) {
   if (account.type === 'credit_card' && account.brand) {
     return (
       <View style={iconStyles.brandWrapper}>
-        <CardBrandLogo brand={account.brand} width={36} height={22} />
+        <CardBrandLogo brand={account.brand} width={40} />
       </View>
     );
   }
@@ -81,8 +81,16 @@ export default function AccountListItem({ account, onPress }: Props) {
         </Text>
       </View>
 
-      <Text variant="default" style={styles.balance}>
-        {formatLPS(account.balance)}
+      <Text
+        variant="default"
+        style={[
+          styles.balance,
+          account.type === 'credit_card' && styles.debtBalance,
+        ]}
+      >
+        {formatLPS(
+          account.type === 'credit_card' ? -Math.abs(account.balance) : account.balance
+        )}
       </Text>
     </Pressable>
   );
@@ -118,5 +126,8 @@ const createStyles = (colors: ThemeColors) =>
       color: colors.success,
       fontWeight: '700',
       fontSize: 15,
+    },
+    debtBalance: {
+      color: colors.destructive,
     },
   });

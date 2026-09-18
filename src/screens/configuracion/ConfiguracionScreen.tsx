@@ -170,7 +170,7 @@ export default function ConfiguracionScreen({ navigation }: Props) {
               <Text variant="default" style={styles.settingTitle}>
                 Red de categorías
               </Text>
-              <Text variant="muted">Grafo de relaciones con recorridos BFS y DFS</Text>
+              <Text variant="muted">Explora cómo se relacionan tus categorías</Text>
             </View>
             <Pressable
               style={styles.profileButton}

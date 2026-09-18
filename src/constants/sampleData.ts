@@ -59,6 +59,7 @@ export type CardWalletData = {
   brand: CardBrand;
   usedBalance: number;
   balanceLabel?: string;
+  isDebt?: boolean;
 };
 
 export type AccountType = 'bank' | 'credit_card' | 'cash';

@@ -1,14 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   atenderSiguientePago,
-  deshacerMovimientoThunk,
   fetchMovimientosByMonthThunk,
   reconstruirColaPagos,
-  rehacerMovimientoThunk,
 } from '../../store/slices/financeSlice';
 import InstallmentCard from '../../components/InstallmentCard';
 import MonthSelector from '../../components/MonthSelector';
@@ -22,12 +20,8 @@ import { useAppSettings } from '../../hooks/useAppSettings';
 import { ThemeColors } from '../../constants/themes';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import {
-  selectEtiquetaDeshacer,
-  selectEtiquetaRehacer,
   selectMovimientosByMonth,
   selectPagosEnCola,
-  selectPuedeDeshacer,
-  selectPuedeRehacer,
   selectSiguientePagoId,
 } from '../../store/selectors/financeSelectors';
 import {
@@ -63,11 +57,6 @@ export default function InicioScreen() {
   );
   const pagosEnCola = useAppSelector(selectPagosEnCola);
   const siguientePagoId = useAppSelector(selectSiguientePagoId);
-  const puedeDeshacer = useAppSelector(selectPuedeDeshacer);
-  const puedeRehacer = useAppSelector(selectPuedeRehacer);
-  const etiquetaDeshacer = useAppSelector(selectEtiquetaDeshacer);
-  const etiquetaRehacer = useAppSelector(selectEtiquetaRehacer);
-  const [historialBusy, setHistorialBusy] = useState(false);
 
   const selectedMonth = useMemo(() => monthKeyToDate(selectedMonthKey), [selectedMonthKey]);
 
@@ -102,36 +91,8 @@ export default function InicioScreen() {
     dispatch(atenderSiguientePago());
     Alert.alert(
       'Pago atendido',
-      `${siguiente.merchant} salió de la cola. El siguiente será el más antiguo que quede pendiente.`
+      `${siguiente.merchant} quedó marcado como atendido. El siguiente será el más antiguo que quede pendiente.`
     );
-  };
-
-  const handleDeshacer = async () => {
-    setHistorialBusy(true);
-    try {
-      await dispatch(deshacerMovimientoThunk()).unwrap();
-    } catch (error) {
-      Alert.alert(
-        'No se pudo deshacer',
-        typeof error === 'string' ? error : 'Intenta de nuevo.'
-      );
-    } finally {
-      setHistorialBusy(false);
-    }
-  };
-
-  const handleRehacer = async () => {
-    setHistorialBusy(true);
-    try {
-      await dispatch(rehacerMovimientoThunk()).unwrap();
-    } catch (error) {
-      Alert.alert(
-        'No se pudo rehacer',
-        typeof error === 'string' ? error : 'Intenta de nuevo.'
-      );
-    } finally {
-      setHistorialBusy(false);
-    }
   };
 
   return (
@@ -146,31 +107,6 @@ export default function InicioScreen() {
           showBack={false}
           onSettingsPress={handleOpenSettings}
         />
-
-        <View style={styles.historyBar}>
-          <Button
-            title="Deshacer"
-            variant="outline"
-            size="sm"
-            disabled={!puedeDeshacer || historialBusy}
-            onPress={handleDeshacer}
-            style={styles.historyButton}
-          />
-          <Button
-            title="Rehacer"
-            variant="outline"
-            size="sm"
-            disabled={!puedeRehacer || historialBusy}
-            onPress={handleRehacer}
-            style={styles.historyButton}
-          />
-        </View>
-        <Text variant="muted" style={styles.historyHint}>
-          {puedeDeshacer
-            ? `Siguiente: deshacer ${etiquetaDeshacer}`
-            : 'Registra, edita o elimina un movimiento para usar la pila LIFO.'}
-          {puedeRehacer ? `  ·  Rehacer ${etiquetaRehacer}` : ''}
-        </Text>
 
         <MonthSelector
           selectedDate={selectedMonth}
@@ -226,8 +162,8 @@ export default function InicioScreen() {
               {pagosEnCola.length > 0 ? (
                 <>
                   <Text variant="muted" style={styles.queueHint}>
-                    Cola FIFO: el gasto que vence primero está al frente. Atenderlo lo saca;
-                    el siguiente pasa a ser el más antiguo que quede.
+                    Primero se atiende el pago más antiguo. Al marcarlo, pasa el siguiente
+                    pendiente.
                   </Text>
                   <Button
                     title="Atender siguiente"
@@ -242,7 +178,7 @@ export default function InicioScreen() {
                       item={item}
                       colaLabel={
                         item.id === siguientePagoId
-                          ? 'Frente de la cola'
+                          ? 'Siguiente a pagar'
                           : `Turno ${index + 1}`
                       }
                       onPress={() => handleMovementPress(item)}
@@ -251,7 +187,7 @@ export default function InicioScreen() {
                 </>
               ) : (
                 <Text variant="muted" style={styles.emptyText}>
-                  No hay pagos pendientes en la cola de este mes.
+                  No hay pagos pendientes este mes.
                 </Text>
               )}
             </TabsContent>
@@ -279,18 +215,6 @@ const createStyles = (colors: ThemeColors) =>
       marginTop: 4,
       marginBottom: 8,
       fontSize: 34,
-    },
-    historyBar: {
-      flexDirection: 'row',
-      gap: 10,
-      marginBottom: 6,
-    },
-    historyButton: {
-      flex: 1,
-    },
-    historyHint: {
-      fontSize: 12,
-      marginBottom: 12,
     },
     statsRow: {
       flexDirection: 'row',

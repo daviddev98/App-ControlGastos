@@ -23,7 +23,6 @@ import {
   deleteAccountThunk,
   fetchMovimientosByAccountThunk,
 } from '../../store/slices/financeSlice';
-import { cuentasIndice } from '../../structures/cuentasIndice';
 import { RootStackParamList } from '../../types/navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CuentasDetalle'>;
@@ -47,6 +46,7 @@ export default function CuentasDetalleScreen({ navigation, route }: Props) {
         brand: account.brand,
         usedBalance: account.balance,
         balanceLabel: 'Saldo utilizado',
+        isDebt: true,
       };
     }
 
@@ -138,10 +138,6 @@ export default function CuentasDetalleScreen({ navigation, route }: Props) {
 
         <CardWallet wallet={wallet} />
 
-        <Text variant="muted" style={styles.hashHint}>
-          Cuenta obtenida por clave hash (cubeta {cuentasIndice.cubetaDe(account.id)})
-        </Text>
-
         <Text variant="subtitle" style={styles.sectionTitle}>
           Movimientos
         </Text>
@@ -230,13 +226,9 @@ const createStyles = (colors: ThemeColors) =>
       paddingBottom: 120,
     },
     sectionTitle: {
+      marginTop: spacing.lg,
       marginBottom: spacing.md,
       fontSize: 20,
-    },
-    hashHint: {
-      fontSize: 12,
-      marginTop: spacing.sm,
-      marginBottom: spacing.lg,
     },
     movementsList: {
       gap: 12,
