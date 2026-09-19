@@ -324,9 +324,7 @@ export default function RegistrarMovimientoScreen({ navigation, route }: Props) 
       nextErrors.date = 'Usa el formato DD/MM/AAAA.';
     }
 
-    if (transactionType === 'gasto' && dueDate.trim() && !isValidDueDay(dueDate)) {
-      nextErrors.dueDate = 'El día de vencimiento debe estar entre 1 y 31.';
-    }
+
 
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -510,17 +508,7 @@ export default function RegistrarMovimientoScreen({ navigation, route }: Props) 
               colors={colors}
             />
 
-            {transactionType === 'gasto' ? (
-              <FormField
-                label="Día de vencimiento (opcional)"
-                value={dueDate}
-                onChange={setDueDate}
-                placeholder="Ej. 18"
-                keyboardType="numeric"
-                error={errors.dueDate}
-                colors={colors}
-              />
-            ) : null}
+
 
             {transactionType === 'gasto' ? (
               <ReceiptPickerField
