@@ -106,6 +106,7 @@ export default function InicioScreen() {
           title="Estadística"
           showBack={false}
           onSettingsPress={handleOpenSettings}
+          onAIAssistantPress={() => navigation.navigate('AsistenteIA')}
         />
 
         <MonthSelector

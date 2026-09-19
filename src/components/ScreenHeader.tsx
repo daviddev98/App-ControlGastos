@@ -10,6 +10,7 @@ type Props = {
   showBack?: boolean;
   onBackPress?: () => void;
   onSettingsPress?: () => void;
+  onAIAssistantPress?: () => void;
 };
 
 export default function ScreenHeader({
@@ -17,6 +18,7 @@ export default function ScreenHeader({
   showBack = true,
   onBackPress,
   onSettingsPress,
+  onAIAssistantPress,
 }: Props) {
   const { colors } = useAppSettings();
   const styles = useMemo(
@@ -36,6 +38,11 @@ export default function ScreenHeader({
         placeholder: {
           width: 40,
         },
+        rightActions: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 8,
+        },
       }),
     []
   );
@@ -54,13 +61,26 @@ export default function ScreenHeader({
         {title}
       </Text>
 
-      {onSettingsPress ? (
-        <Button variant="outline" size="icon" onPress={onSettingsPress}>
-          <Ionicons name="settings-outline" size={18} color={colors.foreground} />
-        </Button>
-      ) : (
-        <View style={styles.placeholder} />
-      )}
+      <View style={styles.rightActions}>
+        {onAIAssistantPress ? (
+          <Button
+            variant="outline"
+            size="icon"
+            onPress={onAIAssistantPress}
+            accessibilityLabel="Abrir Asistente IA"
+          >
+            <Ionicons name="sparkles" size={18} color={colors.primary} />
+          </Button>
+        ) : null}
+
+        {onSettingsPress ? (
+          <Button variant="outline" size="icon" onPress={onSettingsPress}>
+            <Ionicons name="settings-outline" size={18} color={colors.foreground} />
+          </Button>
+        ) : !onAIAssistantPress ? (
+          <View style={styles.placeholder} />
+        ) : null}
+      </View>
     </View>
   );
 }

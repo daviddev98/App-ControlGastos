@@ -297,6 +297,23 @@ export default function ConfiguracionScreen({ navigation }: Props) {
           </CardContent>
         </Card>
 
+        <Card style={styles.settingCard}>
+          <CardContent style={styles.settingRow}>
+            <View style={styles.settingInfo}>
+              <Text variant="default" style={styles.settingTitle}>
+                Asistente Financiero IA
+              </Text>
+              <Text variant="muted">Registra y analiza gastos en lenguaje natural</Text>
+            </View>
+            <Pressable
+              style={styles.profileButton}
+              onPress={() => navigation.navigate('AsistenteIA')}
+            >
+              <Text variant="link">Abrir</Text>
+            </Pressable>
+          </CardContent>
+        </Card>
+
         <Text variant="muted" style={styles.themeHint}>
           Tema actual: {theme === 'dark' ? 'Oscuro' : 'Claro'}
         </Text>

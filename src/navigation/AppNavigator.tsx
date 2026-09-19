@@ -12,6 +12,7 @@ import MetaFormScreen from '../screens/metas/MetaFormScreen';
 import RegisterScreen from '../screens/registro/RegisterScreenCuenta';
 import RegistrarMovimientoScreen from '../screens/registro/RegistrarMovimientoScreen';
 import RedCategoriasScreen from '../screens/categorias/RedCategoriasScreen';
+import AsistenteIAScreen from '../screens/asistente/AsistenteIAScreen';
 import { RootStackParamList } from '../types/navigation';
 import MainTabNavigator from './MainTabNavigator';
 
@@ -44,6 +45,7 @@ export default function AppNavigator() {
             <Stack.Screen name="NuevaCuenta" component={NuevaCuentaScreen} />
             <Stack.Screen name="MetaForm" component={MetaFormScreen} />
             <Stack.Screen name="RedCategorias" component={RedCategoriasScreen} />
+            <Stack.Screen name="AsistenteIA" component={AsistenteIAScreen} />
           </Stack.Group>
         ) : (
           // RUTA PÚBLICA

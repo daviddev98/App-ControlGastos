@@ -268,6 +268,17 @@ export default function RegistrarMovimientoScreen({ navigation, route }: Props) 
     };
   }, [existingMovement]);
 
+  useEffect(() => {
+    if (!existingMovement && route.params?.initialData) {
+      const init = route.params.initialData;
+      if (init.transactionType) setTransactionType(init.transactionType);
+      if (init.amount !== undefined && init.amount > 0) setAmount(String(init.amount));
+      if (init.merchant) setMerchant(init.merchant);
+      if (init.category) setCategory(init.category);
+      if (init.notes) setNotes(init.notes);
+    }
+  }, [existingMovement, route.params?.initialData]);
+
   const bankAccountOptions = useMemo(() => {
     const accountNames = [...new Set(accounts.map((account) => account.name).filter(Boolean))];
     const baseOptions = accountNames.length > 0 ? accountNames : [...BANK_ACCOUNTS];
